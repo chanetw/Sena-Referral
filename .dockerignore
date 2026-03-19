@@ -1,0 +1,13 @@
+# ไฟล์/โฟลเดอร์ที่ไม่จำเป็นตอน build
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+.vscode
+__pycache__/
+*.pyc
+dist
+build
+.next
+coverage

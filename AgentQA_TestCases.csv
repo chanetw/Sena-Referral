@@ -1,0 +1,87 @@
+﻿No,Test Case ID,Module,Test Name,Action (สิ่งที่ต้องทดสอบ),Expected Result (ผลลัพธ์ที่คาดหวัง),Priority
+1,TC-AUTH-001,Authentication,Login with Admin Account,เปิด /login → กรอก admin@test.com / password → คลิก 'เข้าสู่ระบบ' → เปิด DevTools ตรวจ localStorage,"Redirect ไป /admin/dashboard, localStorage มี token และ user.role='admin'",Critical
+2,TC-AUTH-002,Authentication,Login with Agent Account,เปิด /login → กรอกอีเมล Agent (active) + password (idCard) → เข้าสู่ระบบ,Redirect ไป /agent/dashboard และ user.role='agent' มี agent object,Critical
+3,TC-AUTH-003,Authentication,Login with Invalid Credentials,กรอกอีเมล/รหัสผ่านผิด แล้วกดเข้าสู่ระบบ,แสดงข้อความ 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' และไม่มี token ใน localStorage,High
+4,TC-AUTH-004,Authentication,Login with Inactive Agent,ใช้บัญชี Agent ที่ status='inactive' ทำการ login,ระบบปฏิเสธการเข้า แสดง 'บัญชีผู้ใช้ถูกระงับ' หรือ 'รอการอนุมัติ',High
+5,TC-AUTH-005,Authentication,Logout,ขณะ login อยู่ คลิก avatar → 'ออกจากระบบ',Redirect กลับ /login และ localStorage ลบ token/user; เข้าหน้า protected โดยตรงถูก redirect,High
+6,TC-AUTH-006,Authentication,Access Protected Route Without Token,เปิด Incognito → เข้าที่ /admin/dashboard และ /agent/dashboard,ทั้งสองหน้าถูก redirect ไป /login,Critical
+7,TC-AUTH-007,Authentication,Token Expiration Handling,Login แล้วแก้ token ใน localStorage ให้ไม่ถูกต้อง → refresh/call API,ระบบบังคับออก แสดงข้อความ token หมดอายุ/ไม่ถูกต้อง และ redirect /login,High
+8,TC-AUTH-008,Authentication,JWT Token Security,Login → คัดลอก JWT → ตรวจที่ jwt.io,"payload มี {id,iat,exp}; alg=HS256; exp=iat+7d",Critical
+9,TC-AUTH-009,Authentication,Agent Registration,"เข้าหน้า /register-agent → กรอกฟอร์มครบ (ชื่อ, email, phone, idCard, address, registrationDate) → submit",ขึ้นข้อความสำเร็จ; DB: agents.status='inactive'; users.role='agent' (password hashed=idCard),High
+10,TC-AUTH-010,Authentication,CORS Policy Testing,ระหว่างใช้งาน ตรวจ Network Headers และ Console,มี Access-Control-Allow-Origin ตรงกับ origin ที่อนุญาต; ไม่มี CORS error,Critical
+11,TC-ADMIN-DASH-001,Admin Dashboard,View Dashboard Statistics,Login admin → เปิด /admin/dashboard → ตรวจบัตรสถิติ,แสดง 6 cards (Totals) และตัวเลขตรง DB,High
+12,TC-ADMIN-DASH-002,Admin Dashboard,View Dashboard Charts,Scroll ไปส่วน Charts และ hover ดู tooltip ทุกกราฟ,"แสดง 4 charts (Bar, Pie, Line, Area) พร้อม tooltip ถูกต้อง",Medium
+13,TC-ADMIN-DASH-003,Admin Dashboard,View Recent Activities,ดูรายการ Recent Activities,แสดงรายการและ timestamp ถูกต้อง (ถ้ามี),Low
+14,TC-ADMIN-AGENT-001,Agent Management,View All Agents,เปิดเมนู Agent Management → ตรวจตารางและคอลัมน์,"เห็นรายการทั้งหมดและคอลัมน์ครบ (รหัส, ชื่อ, อีเมล, โทร, ID, วันที่, สถานะ, การดำเนินการ)",High
+15,TC-ADMIN-AGENT-002,Agent Management,Filter Agents by Status,ใช้ filter: Active/Inactive/Suspended/All,แสดงเฉพาะรายการตามสถานะที่เลือก ถูกต้องทุกตัวเลือก,Medium
+16,TC-ADMIN-AGENT-003,Agent Management,Search Agents,พิมพ์ชื่อ / agent code / email แล้วค้นหา,ผลลัพธ์ตรง keyword; ล้าง search แล้วแสดงทั้งหมด,Medium
+17,TC-ADMIN-AGENT-004,Agent Management,View Agent Details,คลิกรหัสเอเจนต์เพื่อเปิด Detail Modal,Modal แสดงข้อมูลเอเจนต์ครบ; ปิดได้ปกติ,Medium
+18,TC-ADMIN-AGENT-005,Agent Management,Add New Agent,กด 'เพิ่มเอเจนต์' → กรอกข้อมูลครบ → บันทึก,"ขึ้น Success; ตารางมีรายการใหม่; DB: agents สร้าง, users สร้าง role='agent'",Critical
+19,TC-ADMIN-AGENT-006,Agent Management,Add Agent - Validation Tests,ทดสอบ field ว่าง/รูปแบบผิด (first/last/email/phone/idCard/dup/email/dup/idCard/registrationDate),ระบบขึ้นข้อความ error ตรงตามเคส validation,High
+20,TC-ADMIN-AGENT-007,Agent Management,Edit Agent,กดแก้ไข → ปรับ phone และ status → บันทึก,ขึ้น Success; ตารางและ DB อัปเดต; agent code แก้ไม่ได้,High
+21,TC-ADMIN-AGENT-008,Agent Management,Delete Agent,เลือกลบเอเจนต์ที่ไม่มีลูกค้า → ยืนยัน,ขึ้น Success; ตารางหาย; DB ลบ agents และ users (cascade),Critical
+22,TC-ADMIN-AGENT-009,Agent Management,Delete Agent with Customers,พยายามลบเอเจนต์ที่มีลูกค้า,ระบบป้องกันและแสดง error เรื่อง foreign key หรือแจ้งลบไม่ได้,High
+23,TC-ADMIN-AGENT-010,Agent Management,Approve Pending Agent,Filter Inactive → กด Approve → ยืนยัน,Success; status เปลี่ยน active; users.is_active=true; agent login ได้,Critical
+24,TC-ADMIN-AGENT-011,Agent Management,Reject Pending Agent,Filter Inactive → กด Reject → ยืนยัน,Agent ถูกลบ หรือ status เปลี่ยนตามที่กำหนด; ตาราง/DB สอดคล้อง,High
+25,TC-ADMIN-CUST-001,Customer Management,View All Customers,เปิดเมนู Customer Management → ตรวจคอลัมน์และรูปแบบฟิลด์,เห็นลูกค้าทั้งหมด; คอลัมน์ครบ; คอลัมน์ Agent แสดง 'AGxxx - ชื่อ',High
+26,TC-ADMIN-CUST-002,Customer Management,Filter Customers by Status,เลือก status: active/inactive/pending/ทั้งหมด,แสดงตามสถานะถูกต้อง (มีแค่ 3 สถานะ),Medium
+27,TC-ADMIN-CUST-003,Customer Management,Search Customers,ค้นหาด้วยชื่อ / รหัสลูกค้า / เบอร์โทร,ผลลัพธ์แม่นยำ; clear แล้วกลับมาแสดงทั้งหมด,Medium
+28,TC-ADMIN-CUST-004,Customer Management,View Customer Details,คลิกรหัสลูกค้า เปิด View Modal,ข้อมูลครบ; งบประมาณ format ไทย; วันที่เป็น Thai date,Medium
+29,TC-ADMIN-CUST-005,Customer Management,Add New Customer,กด 'เพิ่มลูกค้า' → กรอกข้อมูลครบ (รวม project dropdown ที่ค้นหาได้) → บันทึก,Success; ตารางมีรายการใหม่; DB customers เพิ่ม; mapping agent/project ถูกต้อง,Critical
+30,TC-ADMIN-CUST-006,Customer Management,Add Customer - Validation Tests,ทดสอบฟิลด์ว่าง/ผิดรูปแบบ (first/last/phone/email/budget range/agentId),ขึ้น error ตาม validation; budgetMax>=budgetMin เท่านั้น,High
+31,TC-ADMIN-CUST-007,Customer Management,Edit Customer,แก้ไขเบอร์/สถานะ/วันที่ (edit mode registrationDate ไม่ required) → บันทึก,Success; ตารางและ DB อัปเดต; วันที่รับรูปแบบ YYYY-MM-DD,High
+32,TC-ADMIN-CUST-008,Customer Management,Delete Customer,ลบลูกค้า → ยืนยัน,Success; รายการหาย; DB ลบสำเร็จ,Critical
+33,TC-ADMIN-CUST-009,Customer Management,Customer Status Tag Colors,ตรวจสี Tag: active/inactive/pending,"active=เขียว, inactive=แดง, pending=ส้ม พร้อมข้อความไทยถูกต้อง",Low
+34,TC-ADMIN-PROJ-001,Project Management,View All Projects,เปิดเมนู Project Management → ตรวจคอลัมน์และรูปแบบราคา,ตารางแสดงครบ; ราคา (บาท) เป็น 3 บรรทัดและมี comma separator,High
+35,TC-ADMIN-PROJ-002,Project Management,Add New Project,กด 'เพิ่มโครงการ' → กรอกรหัส/ชื่อ/ประเภท/ที่ตั้ง/price range/salesTeam/isActive → บันทึก,Success; redirect กลับ list; ตารางและ DB มีรายการใหม่,Critical
+36,TC-ADMIN-PROJ-003,Project Management,Add Project - Price Range Validation,ทดสอบกรณีว่าง/สลับค่าต่ำ-สูง/เท่ากัน,ขึ้น error ตามเคส; ผ่านเมื่อ min<=max,High
+37,TC-ADMIN-PROJ-004,Project Management,Add Project - Field Validations,ทดสอบว่าง/ซ้ำของ projectCode และว่างของชื่อ/ประเภท,ขึ้น error 'รหัสโครงการนี้ถูกใช้งานแล้ว' เป็นต้น,High
+38,TC-ADMIN-PROJ-005,Project Management,Project Type Selection,เปิด dropdown ประเภทโครงการ ตรวจ label,"ค่ากับป้ายกำกับตรงกัน (condo=คอนโด, house=บ้านเดี่ยว, townhome=ทาวน์โฮม, commercial=พาณิชย์)",Medium
+39,TC-ADMIN-PROJ-006,Project Management,Edit Project,แก้ชื่อ/priceRangeMax แล้วบันทึก,Success; ตารางและ DB อัปเดต,High
+40,TC-ADMIN-PROJ-007,Project Management,Delete Project,ลบโครงการ → ยืนยัน,Success; รายการหาย; DB ลบสำเร็จ,Critical
+41,TC-ADMIN-PROJ-008,Project Management,Project Status Toggle,ตรวจ Tag สถานะ isActive true/false,"true=เขียว 'ใช้งาน', false=แดง 'ไม่ใช้งาน'",Medium
+42,TC-ADMIN-PROJ-009,Project Management,Back Button in Project Form,อยู่หน้าแบบฟอร์ม → กด 'ย้อนกลับ',กลับไป list และล้างข้อมูลที่กรอก,Low
+43,TC-AGENT-DASH-001,Agent Dashboard,View Agent Dashboard,Login ด้วย agent (active) → เปิด /agent/dashboard,แสดงโปรไฟล์และสถิติตนเองถูกต้อง,Critical
+44,TC-AGENT-DASH-002,Agent Dashboard,View Own Customers Only,ดูรายการลูกค้าในแดชบอร์ด → ตรวจ API query,แสดงเฉพาะลูกค้าของตน; API เรียก /api/customers?agentId=<self>,Critical
+45,TC-AGENT-DASH-003,Agent Dashboard,Edit Agent Profile,กดแก้ไขโปรไฟล์ → เปลี่ยนเบอร์โทร → บันทึก,Success; เบอร์โทรอัปเดต; DB agents.phone เปลี่ยน,Medium
+46,TC-AGENT-DASH-004,Agent Dashboard,Agent Cannot Access Admin Features,พยายามเข้าหน้า /admin/... และตรวจเมนู,ถูก redirect/Unauthorized; เมนู admin ไม่ปรากฏ,Critical
+47,TC-AGENT-DASH-005,Agent Dashboard,Agent Cannot CRUD Customers via API,ทดสอบ POST/PUT/DELETE /api/customers ด้วย token agent,ได้ 403 Forbidden พร้อมข้อความสิทธิ์ไม่พอ,Critical
+48,TC-AGENT-DASH-006,Agent Dashboard,Agent Cannot Access Others' Customers,Agent A login → ตรวจว่าไม่เห็นลูกค้า Agent B; ทดสอบเรียก API ระบุ agentId ของผู้อื่น,403 หรือ empty; UI ไม่แสดงข้อมูลข้ามกัน,Critical
+49,TC-AGENT-DASH-007,Agent Dashboard,Agent Menu Structure,ตรวจเมนูใน sidebar,มีเฉพาะ Dashboard/Profile; ไม่มีเมนู admin,Medium
+50,TC-CROSS-001,Cross-Role,Role-Based Dashboard Redirect,ทดสอบ login ด้วย admin/manager/agent,"admin/manager → /admin/dashboard, agent → /agent/dashboard",Critical
+51,TC-CROSS-002,Cross-Role,Public Route Access by Authenticated Users,ผู้ใช้ที่ login แล้วเข้าหน้า /login หรือ /register-agent,ถูก redirect ไปแดชบอร์ดตามบทบาท,Medium
+52,TC-CROSS-003,Cross-Role,Manager Role Permissions,login ด้วย manager → ทดสอบเข้า Agent/Customer/Project Mgmt & CRUD,ใช้งานได้เหมือน admin,High
+53,TC-CROSS-004,Cross-Role,Switch Between Roles (Same Browser Session),login admin → logout → login agent ใน browser เดิม → ตรวจ localStorage และเมนู,role เปลี่ยนเป็น agent; เมนูและสิทธิ์อัปเดตถูกต้อง,Medium
+54,TC-CROSS-005,Cross-Role,Concurrent Sessions (Multiple Tabs/Browsers),"เปิด 2 เบราว์เซอร์: A=admin, B=agent → logout A",B ยังอยู่ในระบบ (session แยกกัน),Low
+55,TC-INT-001,Integration,E2E Agent Registration → Approval → Login,ลงทะเบียนเอเจนต์ → admin อนุมัติ → agent ลอง login,ก่อนอนุมัติ login ไม่ได้; หลังอนุมัติ login สำเร็จ,Critical
+56,TC-INT-002,Integration,Create Agent → Assign Customer → View Both Dashboards,admin สร้าง agent; เพิ่มลูกค้าและผูก agent; ตรวจในทั้ง Admin/Agent dashboard,ลูกค้าถูกผูกกับเอเจนต์ใหม่และปรากฏในทั้งสองฝั่ง,High
+57,TC-INT-003,Integration,Create Project → Assign to Customer → Dropdown,สร้างโครงการใหม่ → เพิ่มลูกค้าและเลือกโครงการผ่าน dropdown ค้นหาได้,โครงการใหม่ถูกค้นหา/เลือกได้ และแสดงชื่อถูกต้องในตารางลูกค้า,High
+58,TC-INT-004,Integration,Delete Agent with Customers (FK Constraint),สร้าง agent + ลูกค้า → พยายามลบ agent,ระบบป้องกันและแจ้ง error; agent ยังอยู่,High
+59,TC-INT-005,Integration,Dashboard Statistics Real-Time Update,ดู Dashboard → เพิ่ม agent/customer → กลับมาดูตัวเลข,ตัวเลขรวมปรับเพิ่มถูกต้องหลัง refresh/navigate,Medium
+60,TC-INT-006,Integration,Thai Character Encoding End-to-End,สร้างข้อมูลชื่อไทย (agent/customer) → ตรวจบน UI และ phpMyAdmin,ภาษาไทยไม่เพี้ยนทุกจุด; ไม่มี encoding warning,Critical
+61,TC-UI-001,UI/UX,Responsive – Desktop,"ทดสอบที่ 1920x1080, 1366x768 ทุกหน้าหลัก",layout ถูกต้อง: cards/charts/table ไม่ล้น,Medium
+62,TC-UI-002,UI/UX,Responsive – Tablet,"ที่ 768x1024 ตรวจ sidebar, cards, columns",sidebar ยุบได้; cards 2–3 ต่อแถว; columns บางส่วนซ่อน,Medium
+63,TC-UI-003,UI/UX,Responsive – Mobile,ที่ 375x667 และ 414x896 ตรวจ login/dashboard/tables,ฟอร์มเต็มความกว้าง; sidebar ปิด; ตารางโชว์คอลัมน์จำเป็น,Low
+64,TC-UI-004,UI/UX,Dark/Light Mode (ถ้ามี),สลับธีม,สีพื้น/ตัวอักษรถูกต้องตามธีม,Low
+65,TC-UI-005,UI/UX,Loading States,สังเกตตอน login/fetch/save/delete,มี spinner/disabled state ครบและหายเมื่อสำเร็จ,Medium
+66,TC-UI-006,UI/UX,Empty States,เข้าแต่ละหน้าเมื่อไม่มีข้อมูล,แสดงข้อความว่าง + ปุ่มสร้าง (ถ้ามี),Low
+67,TC-UI-007,UI/UX,Notification Messages,กระตุ้น action ต่างๆ เพื่อให้เกิด success/error,ข้อความแจ้งเตือนถูกประเภท สี และถ้อยคำ,Medium
+68,TC-UI-008,UI/UX,Table Pagination,รายการ > page size → เปลี่ยนหน้า/เปลี่ยน page size,โหลดหน้าใหม่ถูกต้องและ URL query อัปเดต,Medium
+69,TC-UI-009,UI/UX,Modal Behavior,เปิด modal → คลิก backdrop/ESC/ยกเลิก/submit,"พฤติกรรมตรงสเปก (เช่น backdrop ไม่ปิด ถ้ากำหนด), submit success ปิดเอง",Medium
+70,TC-UI-010,UI/UX,Form Field Interactions,ลองกรอกผิด → blur / submit → hover button,"แสดง error ใต้ฟิลด์, focus ไปฟิลด์แรกที่ผิด; ปุ่มมี hover state",Low
+71,TC-SEC-001,Security,SQL Injection Protection,ลอง payload injection ใน login/search/fields,ไม่ bypass/ไม่ error SQL; ข้อความถูก escape,Critical
+72,TC-SEC-002,Security,XSS Protection,ใส่สคริปต์/script/img onerror/javascript: ในฟิลด์ต่างๆ,แสดงเป็นข้อความธรรมดา ไม่ execute,Critical
+73,TC-SEC-003,Security,Password Security,ตรวจ users.password ใน DB; ตรวจ request/response login,เป็น bcrypt hash; ไม่ส่งคืน password ใน response; ข้อมูลส่งใน HTTPS body,Critical
+74,TC-SEC-004,Security,JWT Token Security,ตรวจ payload/signature/แก้ไข payload แล้วยิง API,แก้ไขแล้ว verify fail; API ตอบ 401; ไม่มี password ใน token,Critical
+75,TC-SEC-005,Security,HTTPS/TLS (Production),"ทดสอบ http→https, ตรวจใบรับรอง, ตรวจ HSTS header","มี redirect https, cert valid, มี Strict-Transport-Security",High
+76,TC-SEC-006,Security,Session Management,"ตรวจ persistence ของ localStorage, close/open tab, logout cross-browser",พฤติกรรม session ตรงสเปก; ตัวอย่าง: logout A ไม่กระทบ B,High
+77,TC-SEC-007,Security,CORS Configuration,ทดสอบ origin allowed/blocked และตรวจ response headers,origin ที่อนุญาตทำงานได้; ผิดโดนบล็อก (CORS error),Critical
+78,TC-SEC-008,Security,API Rate Limiting (ถ้ามี),ยิง login ต่อเนื่องจำนวนมาก,เข้าเงื่อนไข rate-limit → 'Too many requests',Low
+79,TC-SEC-009,Security,Role-Based Authorization Bypass Attempts,เปลี่ยน role ใน localStorage; เรียก API ที่ต้องการสิทธิ์สูง,Frontend อาจเปลี่ยนเมนู แต่ API ตอบ 403; เข้าถึงข้อมูลไม่ได้,Critical
+80,TC-PERF-001,Performance,Page Load Time,วัดเวลาโหลดหน้า Login/Dashboard/ตารางใหญ่ ด้วย DevTools,"อยู่ในเกณฑ์ที่กำหนด (เช่น Login <1s, Dashboard <2s)",Medium
+81,TC-PERF-002,Performance,API Response Time,วัดเวลาตอบของ endpoints หลัก ด้วย Postman/DevTools,อยู่ในเกณฑ์ที่กำหนด (เช่น GET /api/agents <300ms),Medium
+82,TC-PERF-003,Performance,Database Query Performance,ใช้ slow query log/EXPLAIN ตรวจ query หลัก,เวลาตามเกณฑ์ (<50–100ms บางรายการ),Medium
+83,TC-PERF-004,Performance,Large Dataset Handling,จำลองข้อมูลจำนวนมากและเปิดตาราง/ค้นหา,"โหลดภายในเวลาที่กำหนด, ไม่ freeze",Low
+84,TC-PERF-005,Performance,Concurrent Users,ใช้ JMeter/k6/Artillery จำลอง 10/50/100 ผู้ใช้,ทำงานได้ ไม่มี deadlock/ข้อผิดพลาดสำคัญ,Low
+85,TC-PERF-006,Performance,Memory Leaks (Frontend),เปิด Memory tab → นำทาง/เปิด-ปิด modal ซ้ำจำนวนมาก,หน่วยความจำไม่พุ่งต่อเนื่อง (ไม่มี leak),Low
+86,TC-PERF-007,Performance,Bundle Size (Frontend),npm run build → ตรวจขนาดไฟล์ใน dist/,bundle อยู่ใต้เกณฑ์ (Initial JS <500KB เป็นต้น),Low

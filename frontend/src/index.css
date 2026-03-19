@@ -1,0 +1,183 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Kanit', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f5f5;
+}
+
+/* Ant Design customizations */
+.ant-layout-sider {
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+}
+
+/* SENA Sidebar Menu Styles */
+.sena-sidebar-menu .ant-menu-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-weight: 500;
+  margin: 4px 8px !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.sena-sidebar-menu .ant-menu-item:hover {
+  background: rgba(0, 188, 212, 0.15) !important;
+  color: #00BCD4 !important;
+  transform: translateX(4px);
+}
+
+.sena-sidebar-menu .ant-menu-item-selected {
+  background: linear-gradient(135deg, #00BCD4 0%, #0097A7 100%) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(0, 188, 212, 0.4) !important;
+}
+
+.sena-sidebar-menu .ant-menu-item-selected .anticon {
+  color: #fff !important;
+  transform: scale(1.1);
+}
+
+.sena-sidebar-menu .ant-menu-item .anticon {
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+.sena-sidebar-menu .ant-menu-item:hover .anticon {
+  color: #00BCD4 !important;
+  transform: scale(1.15);
+}
+
+.ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.ant-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+.ant-btn-primary:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Loading animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Table Improvements - Zebra Stripes & Hover Effects */
+.ant-table-thead > tr > th {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+  color: #2c3e50 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  border-bottom: 2px solid #00BCD4 !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+}
+
+.ant-table-tbody > tr:nth-child(even) {
+  background-color: #fafbfc;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background-color: rgba(0, 188, 212, 0.08) !important;
+  transition: background-color 0.3s ease;
+}
+
+.ant-table-tbody > tr {
+  transition: all 0.2s ease;
+}
+
+.ant-table-tbody > tr:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Table Pagination */
+.ant-pagination-item-active {
+  border-color: #00BCD4 !important;
+  background: linear-gradient(135deg, #00BCD4 0%, #0097A7 100%) !important;
+}
+
+.ant-pagination-item-active a {
+  color: #fff !important;
+}
+
+.ant-pagination-item:hover {
+  border-color: #00BCD4 !important;
+}
+
+.ant-pagination-item:hover a {
+  color: #00BCD4 !important;
+}
+
+/* Table Actions Buttons */
+.ant-table .ant-btn-primary {
+  background: linear-gradient(135deg, #00BCD4 0%, #0097A7 100%) !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(0, 188, 212, 0.3);
+}
+
+.ant-table .ant-btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(0, 188, 212, 0.4) !important;
+  transform: translateY(-2px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .ant-layout-content {
+    margin: 16px !important;
+    padding: 16px !important;
+  }
+
+  .ant-card {
+    margin-bottom: 16px;
+  }
+
+  .ant-table-thead > tr > th {
+    position: relative !important;
+  }
+}

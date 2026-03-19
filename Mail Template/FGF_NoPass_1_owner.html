@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENA HAPPY REFER: การไม่ได้รับสิทธิ์เข้าร่วมกิจกรรม</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* --- 1. General and Typography Styles --- */
+        body {
+            font-family: 'Inter', 'Tahoma', 'Sana Serif', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f7f7f7;
+        }
+
+        /* --- 2. Layout and Container Styles --- */
+        .email-container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        
+        /* --- 3. Custom Theming Classes for Easy Modification --- */
+        /* Primary color for the header and accents: Teal/Cyan (#32bcad) */
+        .primary-bg {
+            /* Fallback solid color for non-supporting email clients */
+            background-color: #32bcad;
+            /* Gradient: White to Teal/Cyan */
+            background-image: linear-gradient(to right, #ffffff, #32bcad); /* ไล่สีจากขาวไปเขียว */
+        }
+
+        /* Accent color for contact box border: Teal/Cyan (#32bcad) */
+        .accent-border-l {
+            border-left-color: #32bcad; /* สี #32bcad */
+        }
+        /* คลาสที่ใช้สำหรับ Placeholder SVG ถูกนำออกไปแล้ว */
+
+    </style>
+</head>
+<body>
+
+    <div class="email-container">
+        
+        <!-- 1. Title Section with Integrated Logo (Updated Background to Gradient, Text to Dark) -->
+        <!-- เปลี่ยน text-white เป็น text-gray-900 เพื่อให้ข้อความอ่านได้ชัดเจนบนพื้นหลังที่เริ่มต้นด้วยสีขาว -->
+        <div class="primary-bg text-gray-900 p-6 rounded-t-xl">
+            
+            <div class="flex items-start"> 
+                <!-- SENA Logo Image from URL (Left Side) -->
+                <div class="w-24 h-8 mr-4 flex-shrink-0 mt-1"> 
+                    <img 
+                        src="https://www.sena.co.th/images/logo-scroll.svg" 
+                        alt="SENA Logo" 
+                        class="w-full h-full object-contain"
+                        onerror="this.onerror=null; this.src='https://placehold.co/96x32/10b981/ffffff?text=SENA+Logo';" 
+                    />
+                </div>
+                
+                <!-- Text Container (Right Side) -->
+                <div>
+                    <!-- ปรับสีข้อความเป็นสีดำเพื่อให้เห็นบนพื้นหลังสีขาว -->
+                    <h1 class="text-2xl font-bold leading-tight" style="color: #1f2937;">SENA HAPPY REFER</h1>
+                    <p class="text-sm font-light leading-snug" style="color: #1f2937;">จดหมายยืนยันการไม่ได้รับสิทธิ์เข้าร่วมกิจกรรม</p>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- Body Content -->
+        <div class="p-6 md:p-8">
+            <!-- Greeting and Subject -->
+            <p class="mb-2 font-semibold text-gray-700">**เรียน (ชื่อผู้แนะนำ)**</p>
+            <p class="mb-6 font-semibold text-gray-700">**เรื่อง:** การไม่ได้รับสิทธิ์เข้าร่วมกิจกรรม SENA HAPPY REFER</p>
+            
+            <p class="mb-4">บริษัทฯ ขอขอบคุณท่านที่เข้าร่วมกิจกรรม SENA HAPPY REFER</p>
+            <p class="mb-8">บริษัท ขออภัย ท่านไม่ได้รับสิทธิ์การแนะนำตามเงื่อนไขที่บริษัทกำหนด </p>
+
+            <!-- Key Information Highlight - Background: Red/Pink (Failed Status) -->
+            <!-- ปรับสีพื้นหลังเป็นสีแดงอ่อนและสีขอบเป็นสีแดงเข้ม เพื่อแสดงสถานะ "ไม่ผ่าน" -->
+            <div class="bg-red-100 border-l-4 border-red-500 p-4 rounded-md mb-10">
+                <!-- เปลี่ยนหัวข้อเพื่อแสดงสถานะโดยรวม -->
+                <p class="font-bold text-lg text-red-800 mb-1">รายชื่อผู้ถูกแนะนำ:</p>
+                <!-- ปรับสีข้อความและเพิ่มสถานะ "ไม่ผ่านเงื่อนไข" -->
+                <p class="text-xl font-extrabold text-red-900">คุณกรรณิการ์ พวงผกา <span class="text-lg font-bold">(ไม่ได้รับสิทธิ์)</span></p>
+            </div>
+
+            <!-- Footer/Contact and Signature -->
+            <div class="pt-6 border-t border-gray-200">
+                
+                <p class="text-base font-medium mb-4">ขอแสดงความนับถือ</p>
+
+                <div class="text-sm mb-6">
+                    <p>บริษัท เสนาดีเวลลอปเม้นท์ จำกัด (มหาชน)</p>
+                </div>
+
+                <!-- Uses accent-border-l for the updated primary border color -->
+                <div class="p-4 bg-blue-50 border-l-4 accent-border-l rounded-md text-sm">
+                    <p class="font-bold text-blue-800 mb-1">ติดต่อสอบถามได้ที่:</p>
+                    <p>ฝ่ายกำกับนโยบาย</p>
+                    <p>เบอร์โทร: 02-5414642 ต่อ 10411</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENA HAPPY REFER - ยืนยันการลงทะเบียน</title>
+    <style>
+        /* Global CSS reset and general styles */
+        body,
+        table,
+        td,
+        a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+
+        table,
+        td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            height: auto;
+            line-height: 100%;
+            outline: none;
+            text-decoration: none;
+        }
+
+        table {
+            border-collapse: collapse !important;
+        }
+
+        body {
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            font-family: 'Sarabun', Tahoma, sans-serif;
+        }
+
+        a[x-apple-data-detectors] {
+            color: inherit !important;
+            text-decoration: none !important;
+            font-size: inherit !important;
+            font-family: inherit !important;
+            font-weight: inherit !important;
+            line-height: inherit !important;
+        }
+
+        /* Specific Thai Font (Fallback) */
+        .font-sarabun {
+            font-family: 'Sarabun', Tahoma, sans-serif;
+        }
+
+        /* Custom Colors */
+        .primary-color {
+            color: #32bcad;
+        }
+
+        .primary-color-bg {
+            background-color: #32bcad;
+        }
+
+        .secondary-color-bg {
+            background-color: #1e3a8a;
+        }
+
+        .highlight-bg {
+            background-color: #cdf0ea;
+        }
+
+        .accent-border {
+            border-left: 4px solid #32bcad;
+        }
+
+        /* Gradient Fallback and Style (Header) */
+        .header-gradient {
+            /* Fallback Solid Color */
+            background-color: #32bcad;
+            /* Gradient for supporting clients */
+            background-image: -webkit-linear-gradient(left, #ffffff 0%, #32bcad 100%);
+            background-image: -o-linear-gradient(left, #ffffff 0%, #32bcad 100%);
+            background-image: linear-gradient(to right, #ffffff 0%, #32bcad 100%);
+        }
+
+        /* Button Style (For reference, inline style is used in the HTML for best compatibility) */
+        .button {
+            display: inline-block;
+            background-color: #1e3a8a;
+            /* Dark Blue Primary Action */
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: 1px solid #1e3a8a;
+            white-space: nowrap;
+        }
+
+        /* Link for text activation (matching button color) */
+        .activate-link {
+            color: #1e3a8a;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body style="margin: 0; padding: 0; background-color: #f7f7f7;">
+
+    <!-- Outer Table (Email Container) -->
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" role="presentation"
+        style="table-layout: fixed; background-color: #f7f7f7;">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+
+                <!-- Inner Table (Content Box) -->
+                <table border="0" cellpadding="0" cellspacing="0" width="600" role="presentation"
+                    style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+
+                    <!-- 1. Header Section (Gradient Background) -->
+                    <tr>
+                        <td align="left" class="header-gradient" style="padding: 24px; border-radius: 12px 12px 0 0;">
+                            <!-- Nested Table for Logo and Text Alignment -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" role="presentation">
+                                <tr>
+                                    <!-- Logo Cell -->
+                                    <td width="96" valign="top" style="padding-right: 16px;">
+                                        <img src="https://www.sena.co.th/images/logo-scroll.svg" alt="SENA Logo"
+                                            width="96" height="32" style="display: block; width: 96px; height: 32px;">
+                                    </td>
+                                    <!-- Text Cell -->
+                                    <td valign="top">
+                                        <!-- Changed Title to reflect Registration Thank You -->
+                                        <p
+                                            style="margin: 0; font-size: 24px; font-weight: bold; line-height: 1.2; color: #1f2937;">
+                                            SENA HAPPY REFER</p>
+                                        <p style="margin: 0; font-size: 14px; line-height: 1.4; color: #374151;">
+                                            ยืนยันการลงทะเบียนกิจกรรม</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- 2. Body Content (Registration Details) -->
+                    <tr>
+                        <td align="left" style="padding: 32px;">
+
+                            <!-- Salutation -->
+                            <p style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: #32bcad;">
+                                สวัสดีคุณ [FULL_NAME]
+                            </p>
+
+                            <!-- Main Thank You Message -->
+                            <p style="margin: 0 0 24px 0; font-size: 16px; color: #333; font-weight: 600;">
+                                ขอบคุณสำหรับการลงทะเบียนร่วมกิจกรรม SENA HAPPY REFER
+                            </p>
+
+                            <!-- Referral Details -->
+                            <p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">
+                                คุณสามารถแนะนำเพื่อน ๆ มาซื้อ บ้าน, คอนโด หรือ อาคารพาณิชย์ ในเครือเสนาได้ง่าย ๆ
+                                และทั้งเพื่อนและคุณก็จะได้รับผลตอบแทนและสิทธิ์ประโยชน์ไปพร้อม ๆ กัน
+                            </p>
+
+                            <!-- ACTIVATE EMAIL SECTION (Now a Prominent Button) -->
+                            <p
+                                style="margin: 0 0 20px 0; font-size: 16px; color: #333; text-align: center; font-weight: 600;">
+                                กรุณากดปุ่ม Activate Email เพื่อยืนยันบัญชีและเปิดใช้งานการเข้าใช้งานระบบ
+                            </p>
+
+                            <!-- Button Table: Ensures the button is centered across email clients -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" role="presentation"
+                                style="margin-bottom: 30px;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="[LINK_ACTIVATE_EMAIL]" target="_blank" class="button"
+                                            style="display: inline-block; background-color: #1e3a8a; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 12px 24px; border-radius: 8px; border: 1px solid #1e3a8a;">
+                                            Activate Email
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 12px 0; font-size: 14px; color: #cc3300; text-align: center;">
+                                ลิงก์นี้ใช้งานได้ภายใน [ACTIVATE_EXPIRE_TEXT]
+                            </p>
+
+                            <p style="margin: 0 0 24px 0; font-size: 14px; color: #4b5563; text-align: center;">
+                                หากปุ่ม Activate ใช้งานไม่ได้ กรุณาคัดลอกลิงก์นี้ไปเปิดในเบราว์เซอร์:<br>
+                                <a href="[LINK_ACTIVATE_EMAIL]" target="_blank"
+                                    style="color: #1e3a8a; text-decoration: underline; word-break: break-all;">[LINK_ACTIVATE_EMAIL]</a>
+                            </p>
+
+                            <!-- Instructions for the next step -->
+                            <p style="margin: 0 0 10px 0; font-size: 16px; color: #333;">
+                                **จากนั้น** ท่านสามารถใช้ Link สำหรับแนะนำรายชื่อ และ ตรวจสอบสถานะรายชื่อที่ได้แนะนำ:
+                            </p>
+
+                            <!-- Link to Agent System -->
+                            <p style="margin: 0 0 30px 0; font-size: 16px;">
+                                <a href="https://agentsena.sena.co.th/agentsena/" target="_blank"
+                                    style="color: #32bcad; text-decoration: underline; font-weight: 500;">
+                                    https://agentsena.sena.co.th/agentsena/
+                                </a>
+                            </p>
+
+                            <!-- User Credentials - IMPROVED FORMATTING -->
+                            <div
+                                style="background-color: #f0f4f8; border-radius: 8px; padding: 16px; margin-bottom: 30px;">
+                                <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold; color: #1e3a8a;">
+                                    ข้อมูลสำหรับเข้าสู่ระบบ:</p>
+
+                                <table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%">
+                                    <tr>
+                                        <!-- Removed colon and increased width slightly for better alignment -->
+                                        <td width="90"
+                                            style="padding-bottom: 4px; font-size: 16px; color: #333; font-weight: bold; white-space: nowrap;">
+                                            Username
+                                        </td>
+                                        <!-- Made the value bold and dark gray for prominence -->
+                                        <td
+                                            style="padding-bottom: 4px; font-size: 16px; color: #1f2937; font-weight: bold; word-break: break-all;">
+                                            [EMAIL]
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <!-- Removed colon and increased width slightly for better alignment -->
+                                        <td width="90"
+                                            style="font-size: 16px; color: #333; font-weight: bold; white-space: nowrap;">
+                                            Password
+                                        </td>
+                                        <!-- Made the value bold and dark gray for prominence -->
+                                        <td
+                                            style="font-size: 16px; color: #1f2937; font-weight: bold; word-break: break-all;">
+                                            เลขบัตรประชาชนที่ใช้ลงทะเบียน
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">
+                                หากท่านไม่ได้เป็นผู้ลงทะเบียน กรุณาละเว้นอีเมลฉบับนี้
+                            </p>
+
+                            <!-- Troubleshooting Note -->
+                            <p style="margin: 0; font-size: 14px; color: #cc3300;">
+                                หากไม่สามารถเปิดใช้งานหรือล็อกอินเข้าสู่ระบบได้ กรุณาแจ้ง <a href="mailto:[SUPPORT_EMAIL]"
+                                    style="color: #cc3300; text-decoration: underline;">[SUPPORT_EMAIL]</a>
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- 3. Footer Section (Signature) -->
+                    <tr>
+                        <td align="left" style="padding: 0 32px 32px 32px;">
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 24px;">
+                                <p style="margin: 0 0 16px 0; font-size: 16px; font-weight: 500; color: #333;">
+                                    ขอแสดงความนับถือ</p>
+
+                                <div style="font-size: 14px; color: #333;">
+                                    <p style="margin: 0;">บริษัท เสนาดีเวลลอปเม้นท์ จำกัด (มหาชน)</p>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                </table>
+                <!-- End Inner Table (Content Box) -->
+
+            </td>
+        </tr>
+    </table>
+    <!-- End Outer Table (Email Container) -->
+
+</body>
+
+</html>
