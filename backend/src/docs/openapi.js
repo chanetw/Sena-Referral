@@ -26,6 +26,12 @@ const options = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT'
+        },
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-Api-Key',
+          description: 'API Key สำหรับ server-to-server — ตั้งค่าใน REGISTER_API_KEY env var'
         }
       },
       schemas: {
@@ -115,6 +121,48 @@ const options = {
             idCard: { type: 'string', example: '1234567890123' },
             agentTypeCode: { type: 'string', example: 'general' }
           }
+        },
+        RegisterAndActivateRequest: {
+          type: 'object',
+          required: ['firstName', 'lastName', 'email', 'idCard'],
+          properties: {
+            firstName: { type: 'string', example: 'สมชาย', description: 'ชื่อจริง' },
+            lastName: { type: 'string', example: 'ใจดี', description: 'นามสกุล' },
+            email: { type: 'string', format: 'email', example: 'agent@example.com', description: 'อีเมลสำหรับล็อกอิน' },
+            phone: { type: 'string', example: '0812345678', description: 'เบอร์โทรศัพท์ (ต้องขึ้นต้นด้วย 0)' },
+            idCard: { type: 'string', example: '1234567890123', description: 'เลขบัตรประชาชน 13 หลัก (ใช้เป็นรหัสผ่านเริ่มต้น)' },
+            agentTypeCode: { type: 'string', example: 'general', description: 'ประเภทเอเจนต์: general, resident, livnex_customer, rentnex_customer, sena_staff, partner' }
+          }
+        },
+        RegisterAndActivateResponse: {
+          allOf: [
+            { $ref: '#/components/schemas/ApiSuccess' },
+            {
+              type: 'object',
+              properties: {
+                data: {
+                  type: 'object',
+                  properties: {
+                    agentCode: { type: 'string', example: 'AG010', description: 'รหัสเอเจนต์อัตโนมัติ' },
+                    firstName: { type: 'string', example: 'สมชาย' },
+                    lastName: { type: 'string', example: 'ใจดี' },
+                    email: { type: 'string', example: 'agent@example.com' },
+                    userStatus: { type: 'string', example: 'active', description: 'สถานะใช้งาน user (active/inactive)' },
+                    agentStatus: { type: 'string', example: 'active', description: 'สถานะ agent (active/inactive ถ้าเลขบัตรซ้ำ)' },
+                    requiresAdminReview: { type: 'boolean', example: false, description: 'ต้องตรวจสอบ admin หรือไม่' },
+                    agentType: { $ref: '#/components/schemas/AgentType' },
+                    loginInfo: {
+                      type: 'object',
+                      properties: {
+                        email: { type: 'string', example: 'agent@example.com' },
+                        password: { type: 'string', example: 'รหัสประชาชน 13 หลัก' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
         },
         ActivateRegistrationRequest: {
           type: 'object',
@@ -412,11 +460,84 @@ const options = {
           }
         }
       },
+      '/api/auth/register': {
+        post: {
+          tags: ['Auth'],
+          summary: '⭐ Register and activate agent (server-to-server)',
+          description: 'Create and activate a user + agent account in a single call.\n\n**Security**: Requires `X-Api-Key` header (set `REGISTER_API_KEY` in environment).\n\n**Password**: รหัสผ่านเริ่มต้นของ user คือเลขบัตรประชาชน 13 หลัก (หรือเปลี่ยนเมื่อ login ครั้งแรก)',
+          security: [{ ApiKeyAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RegisterAndActivateRequest' }
+              }
+            }
+          },
+          responses: {
+            201: {
+              description: 'Registration and activation success',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/RegisterAndActivateResponse' }
+                }
+              }
+            },
+            400: {
+              description: 'Validation error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ApiError' }
+                }
+              }
+            },
+            401: {
+              description: 'Missing or invalid X-Api-Key header',
+              content: {
+                'application/json': {
+                  schema: {
+                    allOf: [
+                      { $ref: '#/components/schemas/ApiError' },
+                      {
+                        type: 'object',
+                        properties: {
+                          errorType: {
+                            type: 'string',
+                            enum: ['missing_api_key', 'invalid_api_key'],
+                            example: 'invalid_api_key'
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            409: {
+              description: 'Duplicate email, phone, or ID card',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ApiError' }
+                }
+              }
+            },
+            503: {
+              description: 'Endpoint disabled (REGISTER_API_KEY not configured)',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ApiError' }
+                }
+              }
+            }
+          }
+        }
+      },
       '/api/auth/activate-registration': {
         post: {
           tags: ['Auth'],
-          summary: 'Create and activate an account from external email activation flow',
-          description: 'External website should call this endpoint after the user clicks the activation link in email.',
+          summary: 'สร้างและเปิดใช้งานบัญชีผู้ใช้จากระบบภายนอก',
+          description: 'Endpoint นี้ถูกเรียกโดยระบบภายนอก (External System) เพื่อสร้างและเปิดใช้งานบัญชีโดยตรง กระบวนการทำงาน: ระบบภายนอกส่ง payload (token + ข้อมูลผู้ใช้) มายัง endpoint นี้ → ระบบตรวจสอบ token → สร้าง user account และ agent record → ส่งผลลัพธ์กลับให้ระบบภายนอก',
+
           requestBody: {
             required: true,
             content: {

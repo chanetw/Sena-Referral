@@ -22,17 +22,32 @@ const ProjectManagement = () => {
   const [editingProject, setEditingProject] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+    totalPages: 0,
+  });
 
   // Load projects from API
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    fetchProjects(pagination.current, pagination.pageSize);
+  }, [pagination.current, pagination.pageSize]);
 
-  const fetchProjects = async () => {
+  const fetchProjects = async (page = 1, limit = 10) => {
     try {
       setLoading(true);
-      const response = await projectsAPI.getAll();
+      const response = await projectsAPI.getAll({ page, limit });
       setProjects(response.data || []);
+      if (response.pagination) {
+        setPagination((prev) => ({
+          ...prev,
+          current: response.pagination.current,
+          pageSize: response.pagination.pageSize,
+          total: response.pagination.total,
+          totalPages: response.pagination.totalPages,
+        }));
+      }
     } catch (error) {
       console.error('Error fetching projects:', error);
       message.error('ไม่สามารถโหลดข้อมูลโครงการได้');
@@ -55,7 +70,7 @@ const ProjectManagement = () => {
     try {
       await projectsAPI.delete(projectId);
       message.success('ลบโครงการสำเร็จ');
-      fetchProjects(); // Reload projects
+      fetchProjects(pagination.current, pagination.pageSize);
     } catch (error) {
       console.error('Error deleting project:', error);
       message.error('ไม่สามารถลบโครงการได้');
@@ -80,11 +95,19 @@ const ProjectManagement = () => {
       }
       setView('list');
       setEditingProject(null);
-      fetchProjects(); // Reload projects
+      fetchProjects(pagination.current, pagination.pageSize);
     } catch (error) {
       console.error('Error saving project:', error);
       message.error(editingProject ? 'ไม่สามารถแก้ไขโครงการได้' : 'ไม่สามารถเพิ่มโครงการได้');
     }
+  };
+
+  const handleTableChange = (nextPagination) => {
+    setPagination((prev) => ({
+      ...prev,
+      current: nextPagination.current,
+      pageSize: nextPagination.pageSize,
+    }));
   };
 
   if (view === 'form') {
@@ -102,6 +125,8 @@ const ProjectManagement = () => {
       key: 'id',
       width: 80,
       align: 'center',
+      sorter: (a, b) => (a.id || 0) - (b.id || 0),
+      defaultSortOrder: 'ascend',
     },
     {
       title: 'รหัสโครงการ',
@@ -147,6 +172,27 @@ const ProjectManagement = () => {
           {record.isActive ? 'ใช้งาน' : 'ไม่ใช้งาน'}
         </Tag>
       )
+    },
+    {
+      title: 'อัปเดตล่าสุด',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
+      width: 160,
+      render: (value) => (value ? new Date(value).toLocaleString('th-TH') : '-')
+    },
+    {
+      title: 'project_sale',
+      dataIndex: 'projectSale',
+      key: 'projectSale',
+      width: 160,
+      render: (value) => value || '-'
+    },
+    {
+      title: 'bud',
+      dataIndex: 'bud',
+      key: 'bud',
+      width: 100,
+      render: (value) => (value !== null && value !== undefined ? value : '-')
     },
     {
       title: 'การดำเนินการ',
@@ -206,7 +252,18 @@ const ProjectManagement = () => {
           dataSource={projects}
           rowKey="id"
           loading={loading}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1400 }}
+          pagination={{
+            current: pagination.current,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => `${range[0]}-${range[1]} จาก ${total} รายการ`,
+            pageSizeOptions: ['10', '20', '50', '100']
+          }}
+          onChange={handleTableChange}
+          footer={() => <div>รวม {pagination.total} โครงการ</div>}
         />
       </Card>
     </div>

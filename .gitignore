@@ -155,3 +155,10 @@ test-results/
 # Local Docker overrides
 docker-compose.override.yml
 docker-compose.override.yml.bak
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Excel temporary lock files
+docs/~$*.xlsx

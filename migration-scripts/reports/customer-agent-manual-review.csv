@@ -1,0 +1,3 @@
+agent_id_card,customer_rows,candidate_agent_cards,recommended_action,note
+3300200585772,22,3302000958771,manual_review,possible typo but affects many rows so confirm before mapping
+3100502564893,2,3100502642681,manual_review,looks close to an existing id but should verify against original agent source

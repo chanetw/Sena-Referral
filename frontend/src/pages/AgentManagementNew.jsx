@@ -324,6 +324,20 @@ const AgentManagementNew = () => {
       ) : '-'
     },
     {
+      title: 'เลขบัตรประชาชน',
+      key: 'idCard',
+      width: 170,
+      render: (_, record) => {
+        const idCard = record.agentIdCard || record.idCard;
+        return idCard ? (
+          <Space>
+            <IdcardOutlined />
+            <span>{idCard}</span>
+          </Space>
+        ) : '-';
+      }
+    },
+    {
       title: 'สถานะ',
       dataIndex: 'status',
       key: 'status',

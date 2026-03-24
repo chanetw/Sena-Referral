@@ -16,6 +16,12 @@ const Customer = sequelize.define('Customer', {
       key: 'id'
     }
   },
+  customerCode: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    unique: true,
+    field: 'customer_code'
+  },
   firstName: {
     type: DataTypes.STRING(50),
     allowNull: false,
@@ -64,6 +70,11 @@ const Customer = sequelize.define('Customer', {
   status: {
     type: DataTypes.ENUM('pending', 'duplicate', 'approved'),
     defaultValue: 'pending'
+  },
+  referralType: {
+    type: DataTypes.ENUM('self', 'friend'),
+    allowNull: true,
+    field: 'referral_type'
   },
   source: {
     type: DataTypes.ENUM('referral', 'walk_in', 'online', 'phone', 'other'),
@@ -117,6 +128,15 @@ const Customer = sequelize.define('Customer', {
       model: 'users',
       key: 'id'
     }
+  },
+  registrationDate: {
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+    field: 'registration_date'
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   tableName: 'customers',

@@ -27,6 +27,14 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('admin', 'agent', 'manager'),
     defaultValue: 'agent'
   },
+  bud: {
+    type: DataTypes.STRING(10),
+    field: 'bud'
+  },
+  name: {
+    type: DataTypes.STRING(255),
+    field: 'name'
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

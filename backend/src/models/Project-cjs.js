@@ -42,6 +42,16 @@ const Project = sequelize.define('Project', {
     allowNull: true,
     field: 'sales_team'
   },
+  projectSale: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: 'project_sale'
+  },
+  bud: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'bud'
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

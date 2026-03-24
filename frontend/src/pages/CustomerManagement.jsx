@@ -16,7 +16,8 @@ import {
   notification,
   Popconfirm,
   Tooltip,
-  Descriptions
+  Descriptions,
+  App
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -27,10 +28,12 @@ import {
   MailOutlined,
   PhoneOutlined,
   IdcardOutlined,
-  HomeOutlined,
   ReloadOutlined,
   TeamOutlined,
-  EyeOutlined
+  EyeOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ClockCircleFilled
 } from '@ant-design/icons';
 import {
   fetchCustomers,
@@ -42,24 +45,40 @@ import {
   setPagination,
   clearError
 } from '../store/customersSlice';
-import { projectsAPI, customersAPI } from '../services/api';
+import { projectsAPI, customersAPI, productTypesAPI } from '../services/api';
 
 const { Title } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
 
-const getStatusTag = (status) => {
-  const statusMap = {
-    approved: { color: 'green', text: 'ผ่าน' },
-    duplicate: { color: 'red', text: 'ไม่ผ่าน' },
-    pending: { color: 'orange', text: 'รออนุมัติ' }
-  };
+// Status config: value -> { color, adminLabel, agentLabel }
+const STATUS_CONFIG = {
+  approved: {
+    color: 'green',
+    adminLabel: 'ผ่าน',
+    agentLabel: 'ผู้ถูกแนะนำของท่านผ่านเงื่อนไข'
+  },
+  pending: {
+    color: 'orange',
+    adminLabel: 'รออนุมัติ',
+    agentLabel: 'รอดำเนินการตรวจสอบ'
+  },
+  duplicate: {
+    color: 'red',
+    adminLabel: 'ไม่ผ่าน',
+    agentLabel: 'ขออภัย ผู้ที่ท่านแนะนำซ้ำกับรายชื่อของฐานข้อมูลโครงการ'
+  }
+};
 
-  const { color, text } = statusMap[status] || { color: 'default', text: status };
-  return <Tag color={color}>{text}</Tag>;
+const getStatusTag = (status, role) => {
+  const cfg = STATUS_CONFIG[status];
+  if (!cfg) return <Tag>{status}</Tag>;
+  const label = role === 'agent' ? cfg.agentLabel : cfg.adminLabel;
+  return <Tag color={cfg.color}>{label}</Tag>;
 };
 
 const CustomerManagement = () => {
+  const { modal } = App.useApp();
   const dispatch = useDispatch();
   const {
     customers,
@@ -71,12 +90,25 @@ const CustomerManagement = () => {
     filters
   } = useSelector((state) => state.customers);
 
+  // Role from auth store: 'admin' or 'agent'
+  const currentUser = useSelector((state) => state.auth?.user);
+  const isAdmin = currentUser?.role === 'admin';
+  const isAgent = currentUser?.role === 'agent';
+  const canCreateCustomer = isAdmin || isAgent;
+
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [isViewModalVisible, setIsViewModalVisible] = useState(false);
   const [viewingCustomer, setViewingCustomer] = useState(null);
   const [form] = Form.useForm();
+
+  // States for status management modal
+  const [isStatusModalVisible, setIsStatusModalVisible] = useState(false);
+  const [statusingCustomer, setStatusingCustomer] = useState(null);
+  const [selectedStatus, setSelectedStatus] = useState(null);
+  const [statusNote, setStatusNote] = useState('');
+  const [statusLoading, setStatusLoading] = useState(false);
 
   // States for auto-increment customer code
   const [nextCustomerCode, setNextCustomerCode] = useState('');
@@ -85,6 +117,8 @@ const CustomerManagement = () => {
   // State for projects list
   const [projectsList, setProjectsList] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [productTypes, setProductTypes] = useState([]);
+  const [productTypesLoading, setProductTypesLoading] = useState(false);
 
   // Load customers, agents and projects on component mount
   useEffect(() => {
@@ -95,18 +129,31 @@ const CustomerManagement = () => {
     }));
     dispatch(fetchAgentsList());
     fetchProjects();
+    fetchProductTypes();
   }, [dispatch, pagination.current, pagination.pageSize, filters]);
 
   // Fetch projects from API
   const fetchProjects = async () => {
     try {
       setProjectsLoading(true);
-      const response = await projectsAPI.getAll();
+      const response = await projectsAPI.getAll({ page: 1, limit: 10000 });
       setProjectsList(response.data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
       setProjectsLoading(false);
+    }
+  };
+
+  const fetchProductTypes = async () => {
+    try {
+      setProductTypesLoading(true);
+      const response = await productTypesAPI.getAll();
+      setProductTypes(response.data || []);
+    } catch (error) {
+      console.error('Error fetching product types:', error);
+    } finally {
+      setProductTypesLoading(false);
     }
   };
 
@@ -127,6 +174,66 @@ const CustomerManagement = () => {
     setIsViewModalVisible(true);
   };
 
+  // Handle open status modal (admin only)
+  const handleOpenStatusModal = (customer) => {
+    setStatusingCustomer(customer);
+    setSelectedStatus(customer.status);
+    setStatusNote('');
+    setIsStatusModalVisible(true);
+  };
+
+  // Handle confirm status change
+  const executeChangeStatus = async () => {
+    if (!selectedStatus || !statusingCustomer) return;
+    setStatusLoading(true);
+    try {
+      await dispatch(updateCustomer({
+        id: statusingCustomer.id,
+        customerData: { status: selectedStatus, ...(statusNote && { notes: statusNote }) }
+      })).unwrap();
+      notification.success({
+        message: 'สำเร็จ',
+        description: `เปลี่ยนสถานะเป็น "${STATUS_CONFIG[selectedStatus].adminLabel}" สำเร็จ`,
+      });
+      setIsStatusModalVisible(false);
+    } catch (error) {
+      notification.error({
+        message: 'เกิดข้อผิดพลาด',
+        description: error || 'ไม่สามารถเปลี่ยนสถานะได้',
+      });
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleChangeStatus = async () => {
+    if (!selectedStatus || !statusingCustomer) return;
+
+    const needsConfirmation = selectedStatus === 'approved' || selectedStatus === 'duplicate';
+    if (!needsConfirmation) {
+      await executeChangeStatus();
+      return;
+    }
+
+    modal.confirm({
+      title: 'ยืนยันการเปลี่ยนสถานะลูกค้า',
+      content: (
+        <div>
+          {selectedStatus === 'duplicate'
+            ? 'กรุณาตรวจสอบข้อมูลอย่างละเอียด ก่อนกดปุ่ม "ยืนยัน" เนื่องจากจะมีข้อความส่งให้นายหน้าทันที ว่าลูกค้าไม่ผ่านเงื่อนไขตามที่ตรวจสอบแล้ว'
+            : 'กรุณาตรวจสอบข้อมูลอย่างละเอียด ก่อนกดปุ่ม "ยืนยัน" เนื่องจากจะมีข้อความส่งให้นายหน้าทันที ว่าลูกค้าได้ผ่านการตรวจสอบแล้ว'
+          }
+        </div>
+      ),
+      okText: 'ยืนยัน',
+      cancelText: 'ยกเลิก',
+      okButtonProps: {
+        danger: selectedStatus === 'duplicate'
+      },
+      onOk: () => executeChangeStatus()
+    });
+  };
+
   // Table columns
   const columns = [
     // Hidden: รหัสลูกค้า column - not needed in customer management view
@@ -144,7 +251,7 @@ const CustomerManagement = () => {
     {
       title: 'ชื่อ-นามสกุล',
       key: 'fullName',
-      width: 180,
+      width: 160,
       render: (_, record) => (
         <Space>
           <UserOutlined />
@@ -153,22 +260,34 @@ const CustomerManagement = () => {
       )
     },
     {
+      title: 'ประเภท',
+      dataIndex: 'referralType',
+      key: 'referralType',
+      width: 110,
+      render: (type) => {
+        if (!type) return '-';
+        return type === 'self'
+          ? <Tag color="blue">แนะนำตัวเอง</Tag>
+          : <Tag color="purple">แนะนำเพื่อน</Tag>;
+      }
+    },
+    {
       title: 'อีเมล',
       dataIndex: 'email',
       key: 'email',
-      width: 200,
-      render: (text) => (
+      width: 160,
+      render: (text) => text ? (
         <Space>
           <MailOutlined />
           <span>{text}</span>
         </Space>
-      )
+      ) : '-'
     },
     {
       title: 'เบอร์โทร',
       dataIndex: 'phone',
       key: 'phone',
-      width: 130,
+      width: 115,
       render: (text) => (text && text.trim() !== '') ? (
         <Space>
           <PhoneOutlined />
@@ -179,7 +298,7 @@ const CustomerManagement = () => {
     {
       title: 'ชื่อโครงการ',
       key: 'projectName',
-      width: 150,
+      width: 130,
       render: (_, record) => {
         // Check if project data exists and has projectName
         if (record.project && record.project.projectName) {
@@ -200,7 +319,7 @@ const CustomerManagement = () => {
     {
       title: 'งบประมาณ',
       key: 'budget',
-      width: 160,
+      width: 130,
       render: (_, record) => {
         // Check for budgetMin and budgetMax first
         if (record.budgetMin && record.budgetMax) {
@@ -223,9 +342,28 @@ const CustomerManagement = () => {
       }
     },
     {
+      title: 'Product Type',
+      dataIndex: 'productTypes',
+      key: 'productTypes',
+      width: 150,
+      render: (productTypes) => {
+        if (!productTypes || productTypes.length === 0) {
+          return '-';
+        }
+
+        return (
+          <Space size={[0, 4]} wrap>
+            {productTypes.map((productType) => (
+              <Tag color="cyan" key={productType.id}>{productType.name}</Tag>
+            ))}
+          </Space>
+        );
+      }
+    },
+    {
       title: 'เอเจนต์',
       key: 'agent',
-      width: 150,
+      width: 130,
       render: (_, record) => {
 
         if (record.agent && record.agent.agentCode && record.agent.firstName) {
@@ -250,30 +388,12 @@ const CustomerManagement = () => {
         return '-';
       }
     },
-    {
-      title: 'ที่อยู่',
-      dataIndex: 'address',
-      key: 'address',
-      width: 150,
-      render: (text) => (text && text.trim() !== '') ? (
-        <Tooltip title={text}>
-          <div style={{
-            maxWidth: '130px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
-            <HomeOutlined style={{ marginRight: '4px' }} />
-            {text}
-          </div>
-        </Tooltip>
-      ) : '-'
-    },
+
     {
       title: 'วันที่ลงทะเบียน',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 130,
+      width: 110,
       render: (date, record) => {
         // Try different field names
         const dateValue = date || record.createdAt || record.created_at;
@@ -290,12 +410,26 @@ const CustomerManagement = () => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status) => getStatusTag(status)
+      render: (status, record) => {
+        if (isAdmin) {
+          return (
+            <Tooltip title="คลิกเพื่อเปลี่ยนสถานะ">
+              <span
+                style={{ cursor: 'pointer' }}
+                onClick={() => handleOpenStatusModal(record)}
+              >
+                {getStatusTag(status, 'admin')}
+              </span>
+            </Tooltip>
+          );
+        }
+        return getStatusTag(status, currentUser?.role);
+      }
     },
     {
       title: 'การจัดการ',
       key: 'actions',
-      width: 120,
+      width: 100,
       fixed: 'right',
       render: (_, record) => (
         <Space>
@@ -306,28 +440,32 @@ const CustomerManagement = () => {
               onClick={() => handleView(record)}
             />
           </Tooltip>
-          <Tooltip title="แก้ไข">
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
-          <Tooltip title="ลบ">
-            <Popconfirm
-              title="ยืนยันการลบ"
-              description="คุณแน่ใจหรือไม่ที่จะลบลูกค้านี้?"
-              onConfirm={() => handleDelete(record.id)}
-              okText="ยืนยัน"
-              cancelText="ยกเลิก"
-            >
+          {isAdmin && (
+            <Tooltip title="แก้ไข">
               <Button
                 type="text"
-                danger
-                icon={<DeleteOutlined />}
+                icon={<EditOutlined />}
+                onClick={() => handleEdit(record)}
               />
-            </Popconfirm>
-          </Tooltip>
+            </Tooltip>
+          )}
+          {isAdmin && (
+            <Tooltip title="ลบ">
+              <Popconfirm
+                title="ยืนยันการลบ"
+                description="คุณแน่ใจหรือไม่ที่จะลบลูกค้านี้?"
+                onConfirm={() => handleDelete(record.id)}
+                okText="ยืนยัน"
+                cancelText="ยกเลิก"
+              >
+                <Button
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                />
+              </Popconfirm>
+            </Tooltip>
+          )}
         </Space>
       )
     }
@@ -381,6 +519,9 @@ const CustomerManagement = () => {
     setEditingCustomer(null);
     setIsModalVisible(true);
     form.resetFields();
+    if (isAgent) {
+      form.setFieldValue('status', 'pending');
+    }
     // Fetch next customer code for new customer
     fetchNextCustomerCode();
   };
@@ -392,9 +533,9 @@ const CustomerManagement = () => {
 
     let budgetRange = '';
     if (customer.budgetMin !== null && customer.budgetMax !== null) {
-      budgetRange = `${customer.budgetMin}-${customer.budgetMax}`;
+      budgetRange = `${parseInt(customer.budgetMin)}-${parseInt(customer.budgetMax)}`;
     } else if (customer.budgetMin !== null) {
-      budgetRange = `${customer.budgetMin}-`;
+      budgetRange = `${parseInt(customer.budgetMin)}-`;
     }
 
     form.setFieldsValue({
@@ -409,6 +550,8 @@ const CustomerManagement = () => {
       address: customer.address,
       agentId: customer.agentId,
       status: customer.status,
+      referralType: customer.referralType,
+      productTypeIds: (customer.productTypes || []).map((productType) => productType.id),
       registrationDate: customer.registrationDate ?
         new Date(customer.registrationDate).toISOString().split('T')[0] : ''
     });
@@ -444,6 +587,10 @@ const CustomerManagement = () => {
       }
 
       const customerData = { ...rest, budgetMin, budgetMax };
+
+      if (isAgent) {
+        customerData.status = 'pending';
+      }
 
       if (editingCustomer) {
         // Update existing customer
@@ -492,13 +639,15 @@ const CustomerManagement = () => {
               </Title>
             </Col>
             <Col>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={handleCreate}
-              >
-                เพิ่มลูกค้าใหม่
-              </Button>
+              {canCreateCustomer && (
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={handleCreate}
+                >
+                  เพิ่มลูกค้าใหม่
+                </Button>
+              )}
             </Col>
           </Row>
         </div>
@@ -514,19 +663,21 @@ const CustomerManagement = () => {
               defaultValue={filters.search}
             />
           </Col>
-          <Col xs={24} sm={6} md={4}>
-            <Select
-              style={{ width: '100%' }}
-              placeholder="กรองตามสถานะ"
-              value={filters.status}
-              onChange={handleStatusFilter}
-            >
-              <Option value="all">ทั้งหมด</Option>
-              <Option value="approved">ผ่าน</Option>
-              <Option value="duplicate">ไม่ผ่าน</Option>
-              <Option value="pending">รออนุมัติ</Option>
-            </Select>
-          </Col>
+          {isAdmin && (
+            <Col xs={24} sm={6} md={4}>
+              <Select
+                style={{ width: '100%' }}
+                placeholder="กรองตามสถานะ"
+                value={filters.status}
+                onChange={handleStatusFilter}
+              >
+                <Option value="all">ทั้งหมด</Option>
+                <Option value="approved">{STATUS_CONFIG.approved.adminLabel}</Option>
+                <Option value="duplicate">{STATUS_CONFIG.duplicate.adminLabel}</Option>
+                <Option value="pending">{STATUS_CONFIG.pending.adminLabel}</Option>
+              </Select>
+            </Col>
+          )}
           <Col xs={24} sm={6} md={6}>
             <Select
               style={{ width: '100%' }}
@@ -551,7 +702,7 @@ const CustomerManagement = () => {
           dataSource={customers}
           rowKey="id"
           loading={loading}
-          scroll={{ x: 1600 }}
+          scroll={{ x: 1300 }}
           pagination={{
             current: pagination.current,
             pageSize: pagination.pageSize,
@@ -635,19 +786,21 @@ const CustomerManagement = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                name="status"
-                label="สถานะ"
-                rules={[{ required: true, message: 'กรุณาเลือกสถานะ' }]}
-              >
-                <Select placeholder="เลือกสถานะ">
-                  <Option value="approved">ผ่าน</Option>
-                  <Option value="duplicate">ไม่ผ่าน</Option>
-                  <Option value="pending">รออนุมัติ</Option>
-                </Select>
-              </Form.Item>
-            </Col>
+            {isAdmin && (
+              <Col xs={24} sm={12}>
+                <Form.Item
+                  name="status"
+                  label="สถานะ"
+                  rules={[{ required: true, message: 'กรุณาเลือกสถานะ' }]}
+                >
+                  <Select placeholder="เลือกสถานะ">
+                    <Option value="approved">{STATUS_CONFIG.approved.adminLabel}</Option>
+                    <Option value="duplicate">{STATUS_CONFIG.duplicate.adminLabel}</Option>
+                    <Option value="pending">{STATUS_CONFIG.pending.adminLabel}</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            )}
           </Row>
 
           <Row gutter={16}>
@@ -675,7 +828,6 @@ const CustomerManagement = () => {
             name="email"
             label="อีเมล"
             rules={[
-              { required: true, message: 'กรุณาใส่อีเมล' },
               { type: 'email', message: 'รูปแบบอีเมลไม่ถูกต้อง' }
             ]}
           >
@@ -737,6 +889,27 @@ const CustomerManagement = () => {
                   <Option value="2000000-3000000">2-3 ล้านบาท</Option>
                   <Option value="4000000-5000000">4-5 ล้านบาท</Option>
                   <Option value="5000000-">มากกว่า 5 ล้านบาท</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="productTypeIds"
+                label="Product Type"
+              >
+                <Select
+                  mode="multiple"
+                  placeholder="เลือกประเภทสินค้า"
+                  allowClear
+                  loading={productTypesLoading}
+                  optionFilterProp="children"
+                  showSearch
+                >
+                  {productTypes.map((productType) => (
+                    <Option key={productType.id} value={productType.id}>
+                      {productType.name}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
@@ -803,6 +976,158 @@ const CustomerManagement = () => {
         </Form>
       </Modal>
 
+      {/* Status Management Modal */}
+      <Modal
+        title={
+          <Space>
+            <ClockCircleFilled style={{ color: '#1890ff' }} />
+            <span>ประเมินสถานะลูกค้า</span>
+          </Space>
+        }
+        open={isStatusModalVisible}
+        onCancel={() => setIsStatusModalVisible(false)}
+        footer={null}
+        width={500}
+        destroyOnHidden
+      >
+        {statusingCustomer && (
+          <>
+            {/* Customer Summary */}
+            <div style={{
+              background: '#f8f9fa',
+              borderRadius: 10,
+              padding: '14px 16px',
+              marginBottom: 20,
+              border: '1px solid #e8e8e8'
+            }}>
+              <Space align="start">
+                <div style={{
+                  width: 40, height: 40, borderRadius: '50%',
+                  background: '#1890ff', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', flexShrink: 0
+                }}>
+                  <UserOutlined style={{ color: 'white', fontSize: 18 }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>
+                    {statusingCustomer.firstName} {statusingCustomer.lastName}
+                  </div>
+                  <Space size={12} style={{ marginTop: 4 }}>
+                    {statusingCustomer.phone && (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        <PhoneOutlined style={{ marginRight: 4 }} />{statusingCustomer.phone}
+                      </Typography.Text>
+                    )}
+                    {statusingCustomer.agent?.agentCode && (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        <TeamOutlined style={{ marginRight: 4 }} />{statusingCustomer.agent.agentCode} – {statusingCustomer.agent.firstName}
+                      </Typography.Text>
+                    )}
+                  </Space>
+                  <div style={{ marginTop: 6 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12, marginRight: 6 }}>สถานะปัจจุบัน:</Typography.Text>
+                    {getStatusTag(statusingCustomer.status, 'admin')}
+                  </div>
+                </div>
+              </Space>
+            </div>
+
+            {/* Status Cards */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 600, marginBottom: 12, color: '#333' }}>เลือกสถานะใหม่</div>
+              <Row gutter={12}>
+                <Col span={8}>
+                  <div
+                    onClick={() => setSelectedStatus('approved')}
+                    style={{
+                      border: `2px solid ${selectedStatus === 'approved' ? '#52c41a' : '#e8e8e8'}`,
+                      borderRadius: 10,
+                      padding: '16px 8px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      background: selectedStatus === 'approved' ? '#f6ffed' : 'white',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedStatus === 'approved' ? '0 2px 8px rgba(82,196,26,0.2)' : 'none'
+                    }}
+                  >
+                    <CheckCircleFilled style={{
+                      fontSize: 30, color: selectedStatus === 'approved' ? '#52c41a' : '#d9d9d9',
+                      marginBottom: 8, display: 'block', transition: 'all 0.2s'
+                    }} />
+                    <div style={{ fontWeight: 600, fontSize: 13, color: selectedStatus === 'approved' ? '#52c41a' : '#666' }}>ผ่าน</div>
+                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>อนุมัติแล้ว</div>
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <div
+                    onClick={() => setSelectedStatus('pending')}
+                    style={{
+                      border: `2px solid ${selectedStatus === 'pending' ? '#fa8c16' : '#e8e8e8'}`,
+                      borderRadius: 10,
+                      padding: '16px 8px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      background: selectedStatus === 'pending' ? '#fff7e6' : 'white',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedStatus === 'pending' ? '0 2px 8px rgba(250,140,22,0.2)' : 'none'
+                    }}
+                  >
+                    <ClockCircleFilled style={{
+                      fontSize: 30, color: selectedStatus === 'pending' ? '#fa8c16' : '#d9d9d9',
+                      marginBottom: 8, display: 'block', transition: 'all 0.2s'
+                    }} />
+                    <div style={{ fontWeight: 600, fontSize: 13, color: selectedStatus === 'pending' ? '#fa8c16' : '#666' }}>รออนุมัติ</div>
+                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>ยังไม่ตัดสิน</div>
+                  </div>
+                </Col>
+                <Col span={8}>
+                  <div
+                    onClick={() => setSelectedStatus('duplicate')}
+                    style={{
+                      border: `2px solid ${selectedStatus === 'duplicate' ? '#ff4d4f' : '#e8e8e8'}`,
+                      borderRadius: 10,
+                      padding: '16px 8px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      background: selectedStatus === 'duplicate' ? '#fff2f0' : 'white',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedStatus === 'duplicate' ? '0 2px 8px rgba(255,77,79,0.2)' : 'none'
+                    }}
+                  >
+                    <CloseCircleFilled style={{
+                      fontSize: 30, color: selectedStatus === 'duplicate' ? '#ff4d4f' : '#d9d9d9',
+                      marginBottom: 8, display: 'block', transition: 'all 0.2s'
+                    }} />
+                    <div style={{ fontWeight: 600, fontSize: 13, color: selectedStatus === 'duplicate' ? '#ff4d4f' : '#666' }}>ไม่ผ่าน</div>
+                    <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>ปฏิเสธแล้ว</div>
+                  </div>
+                </Col>
+              </Row>
+            </div>
+
+            {/* Footer */}
+            <div style={{ textAlign: 'right', borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+              <Space>
+                <Button onClick={() => setIsStatusModalVisible(false)}>ยกเลิก</Button>
+                <Button
+                  type="primary"
+                  loading={statusLoading}
+                  disabled={selectedStatus === statusingCustomer.status}
+                  onClick={handleChangeStatus}
+                  style={{
+                    ...(selectedStatus === 'approved' && { background: '#52c41a', borderColor: '#52c41a' }),
+                    ...(selectedStatus === 'duplicate' && { background: '#ff4d4f', borderColor: '#ff4d4f' }),
+                    ...(selectedStatus === 'pending' && { background: '#fa8c16', borderColor: '#fa8c16' }),
+                  }}
+                >
+                  ยืนยันการเปลี่ยนสถานะ
+                </Button>
+              </Space>
+            </div>
+          </>
+        )}
+      </Modal>
+
       {/* Customer View Modal */}
       <Modal
         title="รายละเอียดลูกค้า"
@@ -819,7 +1144,7 @@ const CustomerManagement = () => {
           <Descriptions bordered column={2}>
             <Descriptions.Item label="รหัสลูกค้า">{viewingCustomer.customerCode}</Descriptions.Item>
             <Descriptions.Item label="สถานะ">
-              {getStatusTag(viewingCustomer.status)}
+              {getStatusTag(viewingCustomer.status, currentUser?.role)}
             </Descriptions.Item>
             <Descriptions.Item label="ชื่อ">{viewingCustomer.firstName}</Descriptions.Item>
             <Descriptions.Item label="นามสกุล">{viewingCustomer.lastName}</Descriptions.Item>

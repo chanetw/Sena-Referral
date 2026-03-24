@@ -31,6 +31,11 @@ const Agent = sequelize.define('Agent', {
     unique: true,
     field: 'agent_code'
   },
+  agentIdCard: {
+    type: DataTypes.STRING(13),
+    allowNull: true,
+    field: 'agent_id_card'
+  },
   idCard: {
     type: DataTypes.STRING(13),
     allowNull: false,
@@ -63,6 +68,16 @@ const Agent = sequelize.define('Agent', {
   status: {
     type: DataTypes.ENUM('active', 'inactive', 'suspended'),
     defaultValue: 'active'
+  },
+  email: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: 'email'
+  },
+  duplicateLeadId: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    field: 'duplicate_lead_id'
   }
 }, {
   tableName: 'agents',

@@ -66,6 +66,7 @@ export const agentsAPI = {
   getById: (id) => api.get(`/agents/${id}`),
   create: (agentData) => api.post('/agents', agentData),
   update: (id, agentData) => api.put(`/agents/${id}`, agentData),
+  updateProfile: (agentData) => api.put('/agents/profile', agentData),
   delete: (id) => api.delete(`/agents/${id}`),
   getList: () => api.get('/agents/list'),
   getNextCode: () => api.get('/agents/next-code'),
@@ -73,6 +74,21 @@ export const agentsAPI = {
 
 export const agentTypesAPI = {
   getAll: () => api.get('/agent-types'),
+};
+
+export const productTypesAPI = {
+  getAll: (params) => api.get('/product-types', { params }),
+  create: (productTypeData) => api.post('/product-types', productTypeData),
+  update: (id, productTypeData) => api.put(`/product-types/${id}`, productTypeData),
+  delete: (id) => api.delete(`/product-types/${id}`),
+};
+
+export const notificationRulesAPI = {
+  getAll: () => api.get('/notification-rules'),
+  create: (ruleData) => api.post('/notification-rules', ruleData),
+  update: (id, ruleData) => api.put(`/notification-rules/${id}`, ruleData),
+  testSend: (id, payload = {}) => api.post(`/notification-rules/${id}/test-send`, payload),
+  delete: (id) => api.delete(`/notification-rules/${id}`),
 };
 
 // Customers API

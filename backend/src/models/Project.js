@@ -38,6 +38,14 @@ const Project = sequelize.define('Project', {
     type: DataTypes.STRING(50),
     field: 'sales_team'
   },
+  projectSale: {
+    type: DataTypes.STRING(100),
+    field: 'project_sale'
+  },
+  bud: {
+    type: DataTypes.INTEGER,
+    field: 'bud'
+  },
   description: {
     type: DataTypes.TEXT
   },

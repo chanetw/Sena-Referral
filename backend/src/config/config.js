@@ -56,6 +56,16 @@ const config = {
     password: process.env.SMTP_PASSWORD
   },
   
+  // Server-to-server register API key
+  // ต้องตั้งค่าใน production — ถ้าไม่ตั้งค่า endpoint /api/auth/register จะถูกบล็อกทั้งหมด
+  registerApiKey: {
+    key: process.env.REGISTER_API_KEY || '',
+    rateLimit: {
+      windowMs: parseInt(process.env.REGISTER_API_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+      maxRequests: parseInt(process.env.REGISTER_API_RATE_LIMIT_MAX_REQUESTS) || 30
+    }
+  },
+
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100

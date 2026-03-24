@@ -1,0 +1,85 @@
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: sena_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: sena_referral
+      MYSQL_USER: sena_user
+      MYSQL_PASSWORD: sena_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./customer-audit-triggers.sql:/docker-entrypoint-initdb.d/02-triggers.sql
+      - ./init-database.sql:/docker-entrypoint-initdb.d/03-sample-data.sql
+    networks:
+      - sena_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Backend API
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sena_api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "4000:4000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sena_network
+
+  # Frontend Web App
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sena_web
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - api
+    ports:
+      - "3000:5173"
+    networks:
+      - sena_network
+
+  # phpMyAdmin - Database Management Tool
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: sena_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: sena_user
+      PMA_PASSWORD: sena_password
+      MYSQL_ROOT_PASSWORD: rootpassword
+      UPLOAD_LIMIT: 100M
+    ports:
+      - "8080:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sena_network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  sena_network:
+    driver: bridge

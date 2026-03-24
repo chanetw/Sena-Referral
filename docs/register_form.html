@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register & Activate - Test Form</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;max-width:760px;margin:36px auto;padding:12px}label{display:block;margin-top:10px}input,select{width:100%;padding:8px;margin-top:4px}button{margin-top:12px;padding:8px 12px}</style>
+</head>
+<body>
+  <h2>ทดสอบสร้างผู้ใช้งาน + เปิดใช้ (สำหรับแล็บ/ภายใน)</h2>
+  <p style="color:#b00">คำเตือน: ห้ามวาง API key ที่สำคัญในไฟล์นี้บนเว็บสาธารณะ — เหมาะสำหรับการรันในเครื่องภายในเท่านั้น</p>
+
+  <label>API Base URL
+    <input id="baseUrl" value="http://localhost:4000" />
+  </label>
+  <label>API Key (X-Api-Key)
+    <input id="apiKey" placeholder="วาง REGISTER_API_KEY ที่นี่" />
+  </label>
+
+  <form id="regForm">
+    <label>First name<input id="firstName" required /></label>
+    <label>Last name<input id="lastName" required /></label>
+    <label>Email<input id="email" type="email" required /></label>
+    <label>ID Card (เลขบัตรประชาชน)<input id="idCard" required /></label>
+    <label>Phone<input id="phone" required /></label>
+    <label>Agent Type Code (optional)<input id="agentTypeCode" placeholder="e.g. AGT001" /></label>
+    <button type="submit">ส่งคำขอ</button>
+  </form>
+
+  <pre id="result" style="background:#f7f7f7;padding:12px;margin-top:12px;white-space:pre-wrap"></pre>
+
+  <script>
+    document.getElementById('regForm').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const baseUrl = document.getElementById('baseUrl').value.replace(/\/$/, '');
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const payload = {
+        firstName: document.getElementById('firstName').value.trim(),
+        lastName: document.getElementById('lastName').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        idCard: document.getElementById('idCard').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+      };
+      const agentTypeCode = document.getElementById('agentTypeCode').value.trim();
+      if(agentTypeCode) payload.agentTypeCode = agentTypeCode;
+
+      try{
+        const res = await fetch(baseUrl + '/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Api-Key': apiKey
+          },
+          body: JSON.stringify(payload)
+        });
+        const txt = await res.text();
+        let out;
+        try{ out = JSON.parse(txt); } catch(_) { out = txt; }
+        document.getElementById('result').textContent = JSON.stringify({ status: res.status, body: out }, null, 2);
+      }catch(err){
+        document.getElementById('result').textContent = 'Fetch error: ' + String(err);
+      }
+    });
+  </script>
+</body>
+</html>

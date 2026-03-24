@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SENA Agent Dashboard - ระบบแนะนำลูกค้า</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Prompt', 'sans-serif'],
+          },
+          colors: {
+            sena: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              200: '#bbf7d0',
+              300: '#86efac',
+              400: '#4ade80',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * {
+      font-family: 'Prompt', sans-serif;
+    }
+    /* ซ่อน modal ก่อน Vue โหลดเสร็จ */
+    [v-cloak] {
+      display: none !important;
+    }
+    /* ซ่อน modal เริ่มต้น */
+    .modal-hidden {
+      display: none !important;
+    }
+    .sidebar-transition {
+      transition: width 0.3s ease-in-out;
+    }
+    .fade-in {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .menu-item {
+      transition: all 0.2s ease;
+    }
+    .menu-item:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    .menu-item.active {
+      background-color: rgba(34, 197, 94, 0.2);
+      border-left: 3px solid #22c55e;
+    }
+    .gradient-bg {
+      background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+    }
+    .status-badge {
+      @apply px-3 py-1 rounded-full text-xs font-medium;
+    }
+    .table-row:hover {
+      background-color: #f9fafb;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app" v-cloak class="flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar-transition bg-gray-900 text-white flex-shrink-0" :class="collapsed ? 'w-20' : 'w-64'">
+      <!-- Logo -->
+      <div class="h-16 flex items-center px-4 border-b border-gray-800" :class="collapsed ? 'justify-center' : 'justify-start gap-3'">
+        <div class="w-10 h-10 bg-sena-500 rounded-lg flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-home text-white text-lg"></i>
+        </div>
+        <span v-if="!collapsed" class="font-bold text-xl tracking-tight">SENA Agent</span>
+      </div>
+      
+      <!-- Menu -->
+      <nav class="mt-4 px-2">
+        <div class="mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" v-if="!collapsed">
+          เมนูหลัก
+        </div>
+        
+        <a href="#" 
+           @click.prevent="selectedMenu = 'dashboard'"
+           class="menu-item flex items-center gap-3 px-3 py-3 rounded-lg mb-1"
+           :class="selectedMenu === 'dashboard' ? 'active text-sena-400' : 'text-gray-300'"
+           :title="collapsed ? 'แดชบอร์ด' : ''">
+          <i class="fas fa-chart-line w-5 text-center"></i>
+          <span v-if="!collapsed">แดชบอร์ด</span>
+        </a>
+        
+        <a href="#" 
+           @click.prevent="selectedMenu = 'customers'"
+           class="menu-item flex items-center gap-3 px-3 py-3 rounded-lg mb-1"
+           :class="selectedMenu === 'customers' ? 'active text-sena-400' : 'text-gray-300'"
+           :title="collapsed ? 'ลูกค้าของฉัน' : ''">
+          <i class="fas fa-users w-5 text-center"></i>
+          <span v-if="!collapsed">ลูกค้าของฉัน</span>
+          <span v-if="!collapsed && customers.length > 0" class="ml-auto bg-sena-500 text-white text-xs px-2 py-0.5 rounded-full">
+            {{ customers.length }}
+          </span>
+        </a>
+        
+        <a href="#" 
+           @click.prevent="selectedMenu = 'profile'"
+           class="menu-item flex items-center gap-3 px-3 py-3 rounded-lg mb-1"
+           :class="selectedMenu === 'profile' ? 'active text-sena-400' : 'text-gray-300'"
+           :title="collapsed ? 'ข้อมูลส่วนตัว' : ''">
+          <i class="fas fa-user w-5 text-center"></i>
+          <span v-if="!collapsed">ข้อมูลส่วนตัว</span>
+        </a>
+      </nav>
+      
+      <!-- Bottom Section -->
+      <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
+        <button @click="collapsed = !collapsed" 
+                class="w-full flex items-center justify-center gap-2 text-gray-400 hover:text-white transition-colors py-2 rounded-lg hover:bg-gray-800">
+          <i class="fas" :class="collapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
+          <span v-if="!collapsed">พับเมนู</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Header -->
+      <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
+        <div class="flex items-center gap-4">
+          <h1 class="text-xl font-semibold text-gray-800">
+            {{ menuTitles[selectedMenu] }}
+          </h1>
+        </div>
+        
+        <div class="flex items-center gap-4">
+          <!-- Notification -->
+          <button class="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+            <i class="fas fa-bell text-lg"></i>
+            <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+          </button>
+          
+          <!-- User Dropdown -->
+          <div class="relative">
+            <button @click="showUserMenu = !showUserMenu" 
+                    class="flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+              <div class="w-8 h-8 bg-sena-500 rounded-full flex items-center justify-center text-white font-medium">
+                {{ user.firstName?.[0] }}{{ user.lastName?.[0] }}
+              </div>
+              <div class="text-left hidden sm:block">
+                <div class="text-sm font-medium text-gray-800">{{ user.firstName }} {{ user.lastName }}</div>
+                <div class="text-xs text-gray-500">{{ user.agentCode }} - เอเจนต์</div>
+              </div>
+              <i class="fas fa-chevron-down text-gray-400 text-xs ml-1"></i>
+            </button>
+            
+            <!-- Dropdown Menu -->
+            <div v-if="showUserMenu" 
+                 @click.away="showUserMenu = false"
+                 class="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <a href="#" @click.prevent="selectedMenu = 'profile'; showUserMenu = false" 
+                 class="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50">
+                <i class="fas fa-user w-4"></i> โปรไฟล์
+              </a>
+              <div class="border-t border-gray-200 my-1"></div>
+              <a href="#" @click.prevent="logout" 
+                 class="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50">
+                <i class="fas fa-sign-out-alt w-4"></i> ออกจากระบบ
+              </a>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <main class="flex-1 overflow-auto p-6">
+        <!-- Dashboard View -->
+        <div v-if="selectedMenu === 'dashboard'" class="fade-in space-y-6">
+          <!-- Stats Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Total Customers -->
+            <div class="bg-white rounded-xl p-6 card-hover border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-gray-500 mb-1">ลูกค้าทั้งหมด</p>
+                  <h3 class="text-3xl font-bold text-gray-800">{{ customers.length }}</h3>
+                  <p class="text-xs text-sena-600 mt-2 flex items-center gap-1">
+                    <i class="fas fa-arrow-up"></i> เพิ่มขึ้นในสัปดาห์นี้
+                  </p>
+                </div>
+                <div class="w-14 h-14 bg-sena-100 rounded-xl flex items-center justify-center">
+                  <i class="fas fa-users text-2xl text-sena-600"></i>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Approved Customers -->
+            <div class="bg-white rounded-xl p-6 card-hover border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-gray-500 mb-1">ผู้ถูกแนะนำที่ผ่านเงื่อนไข</p>
+                  <h3 class="text-3xl font-bold text-gray-800">{{ approvedCount }}</h3>
+                  <p class="text-xs text-blue-600 mt-2">
+                    {{ approvalRate }}% ของลูกค้าทั้งหมด
+                  </p>
+                </div>
+                <div class="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <i class="fas fa-check-circle text-2xl text-blue-600"></i>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Pending Customers -->
+            <div class="bg-white rounded-xl p-6 card-hover border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-gray-500 mb-1">รอดำเนินการตรวจสอบ</p>
+                  <h3 class="text-3xl font-bold text-gray-800">{{ pendingCount }}</h3>
+                  <p class="text-xs text-orange-600 mt-2">
+                    ต้องตรวจสอบเพิ่มเติม
+                  </p>
+                </div>
+                <div class="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <i class="fas fa-clock text-2xl text-orange-600"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="bg-gradient-to-r from-sena-600 to-sena-700 rounded-xl p-6 text-white">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-xl font-bold mb-2">เพิ่มลูกค้าใหม่</h3>
+                <p class="text-sena-100">เริ่มต้นแนะนำลูกค้าใหม่เข้าสู่ระบบเพื่อรับค่าคอมมิชชั่น</p>
+              </div>
+              <button @click="showAddModal = true" 
+                      class="bg-white text-sena-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors flex items-center gap-2 shadow-lg">
+                <i class="fas fa-plus"></i> เพิ่มลูกค้าใหม่
+              </button>
+            </div>
+          </div>
+
+          <!-- Recent Customers Table -->
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 class="font-semibold text-gray-800">ลูกค้าล่าสุด</h3>
+              <button @click="selectedMenu = 'customers'" class="text-sena-600 hover:text-sena-700 text-sm font-medium">
+                ดูทั้งหมด <i class="fas fa-arrow-right ml-1"></i>
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ลูกค้า</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โครงการ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">งบประมาณ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="customer in recentCustomers" :key="customer.id" class="table-row transition-colors">
+                    <td class="px-6 py-4">
+                      <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-medium">
+                          {{ customer.firstName[0] }}{{ customer.lastName[0] }}
+                        </div>
+                        <div>
+                          <div class="font-medium text-gray-800">{{ customer.firstName }} {{ customer.lastName }}</div>
+                          <div class="text-sm text-gray-500">{{ customer.phone }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 text-gray-700">{{ customer.projectName }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ formatBudget(customer) }}</td>
+                    <td class="px-6 py-4">
+                      <span :class="getStatusClass(customer.status)">
+                        {{ getStatusText(customer.status) }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 text-gray-500 text-sm">{{ formatDate(customer.registrationDate) }}</td>
+                  </tr>
+                  <tr v-if="customers.length === 0">
+                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                      <i class="fas fa-inbox text-4xl mb-3 text-gray-300"></i>
+                      <p>ยังไม่มีลูกค้า</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Customers View -->
+        <div v-if="selectedMenu === 'customers'" class="fade-in space-y-6">
+          <!-- Action Bar -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="relative flex-1 max-w-md">
+              <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+              <input type="text" 
+                     v-model="searchQuery" 
+                     placeholder="ค้นหาลูกค้า..."
+                     class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none transition-all">
+            </div>
+            <button @click="showAddModal = true" 
+                    class="bg-sena-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-sena-700 transition-colors flex items-center gap-2 shadow-sm">
+              <i class="fas fa-plus"></i> เพิ่มลูกค้าใหม่
+            </button>
+          </div>
+
+          <!-- Filters -->
+          <div class="flex flex-wrap gap-2">
+            <button @click="statusFilter = 'all'" 
+                    :class="statusFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              ทั้งหมด ({{ customers.length }})
+            </button>
+            <button @click="statusFilter = 'approved'" 
+                    :class="statusFilter === 'approved' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              ผ่านเงื่อนไข ({{ approvedCount }})
+            </button>
+            <button @click="statusFilter = 'pending'" 
+                    :class="statusFilter === 'pending' ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              รอตรวจสอบ ({{ pendingCount }})
+            </button>
+            <button @click="statusFilter = 'duplicate'" 
+                    :class="statusFilter === 'duplicate' ? 'bg-red-500 text-white' : 'bg-white text-gray-700 border border-gray-300'"
+                    class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              ซ้ำในระบบ ({{ duplicateCount }})
+            </button>
+          </div>
+
+          <!-- Customers Table -->
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ลูกค้า</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ติดต่อ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">โครงการ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">งบประมาณ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่ลงทะเบียน</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="customer in filteredCustomers" :key="customer.id" class="table-row transition-colors">
+                    <td class="px-6 py-4">
+                      <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-gradient-to-br from-sena-400 to-sena-600 rounded-full flex items-center justify-center text-white font-medium">
+                          {{ customer.firstName[0] }}{{ customer.lastName[0] }}
+                        </div>
+                        <div>
+                          <div class="font-medium text-gray-800">{{ customer.firstName }} {{ customer.lastName }}</div>
+                          <div class="text-xs text-gray-400">{{ customer.customerCode }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4">
+                      <div class="text-sm text-gray-700">{{ customer.email || '-' }}</div>
+                      <div class="text-sm text-gray-500">{{ customer.phone }}</div>
+                    </td>
+                    <td class="px-6 py-4 text-gray-700">{{ customer.projectName || '-' }}</td>
+                    <td class="px-6 py-4 text-gray-700">{{ formatBudget(customer) }}</td>
+                    <td class="px-6 py-4">
+                      <span :class="getStatusClass(customer.status)">
+                        {{ getStatusText(customer.status) }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 text-gray-500 text-sm">{{ formatDate(customer.registrationDate) }}</td>
+                  </tr>
+                  <tr v-if="filteredCustomers.length === 0">
+                    <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                      <i class="fas fa-inbox text-4xl mb-3 text-gray-300"></i>
+                      <p>ไม่พบข้อมูลลูกค้า</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between" v-if="filteredCustomers.length > 0">
+              <div class="text-sm text-gray-500">
+                แสดง {{ filteredCustomers.length }} รายการ
+              </div>
+              <div class="flex gap-2">
+                <button class="px-3 py-1 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50" disabled>
+                  ก่อนหน้า
+                </button>
+                <button class="px-3 py-1 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50" disabled>
+                  ถัดไป
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile View -->
+        <div v-if="selectedMenu === 'profile'" class="fade-in max-w-4xl mx-auto">
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <!-- Profile Header -->
+            <div class="bg-gradient-to-r from-sena-600 to-sena-700 px-6 py-8 text-white">
+              <div class="flex items-center gap-6">
+                <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-3xl font-bold">
+                  {{ user.firstName?.[0] }}{{ user.lastName?.[0] }}
+                </div>
+                <div>
+                  <h2 class="text-2xl font-bold">{{ user.firstName }} {{ user.lastName }}</h2>
+                  <p class="text-sena-100">{{ user.agentCode }} - เอเจนต์</p>
+                  <span class="inline-flex items-center gap-1 bg-green-500/20 text-green-100 px-3 py-1 rounded-full text-sm mt-2">
+                    <i class="fas fa-check-circle text-xs"></i> ใช้งาน
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Profile Info -->
+            <div class="p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h3 class="font-semibold text-gray-800">ข้อมูลส่วนตัว</h3>
+                <button v-if="!isEditingProfile" @click="isEditingProfile = true" 
+                        class="text-sena-600 hover:text-sena-700 font-medium flex items-center gap-1">
+                  <i class="fas fa-edit"></i> แก้ไขเบอร์โทร
+                </button>
+              </div>
+              
+              <div v-if="!isEditingProfile" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-gray-50 rounded-lg p-4">
+                  <label class="text-sm text-gray-500 block mb-1">รหัสเอเจนต์</label>
+                  <div class="font-medium text-gray-800">{{ user.agentCode }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                  <label class="text-sm text-gray-500 block mb-1">อีเมล</label>
+                  <div class="font-medium text-gray-800">{{ user.email }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                  <label class="text-sm text-gray-500 block mb-1">ชื่อ</label>
+                  <div class="font-medium text-gray-800">{{ user.firstName }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                  <label class="text-sm text-gray-500 block mb-1">นามสกุล</label>
+                  <div class="font-medium text-gray-800">{{ user.lastName }}</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                  <label class="text-sm text-gray-500 block mb-1">เบอร์โทร</label>
+                  <div class="font-medium text-gray-800">{{ user.phone || '-' }}</div>
+                </div>
+              </div>
+              
+              <!-- Edit Form -->
+              <form v-else @submit.prevent="updateProfile" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">รหัสเอเจนต์</label>
+                    <input type="text" :value="user.agentCode" disabled 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
+                    <input type="email" :value="user.email" disabled 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ</label>
+                    <input type="text" :value="user.firstName" disabled 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                    <p class="text-xs text-gray-500 mt-1">* ติดต่อผู้ดูแลระบบเพื่อแก้ไข</p>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">นามสกุล</label>
+                    <input type="text" :value="user.lastName" disabled 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500">
+                    <p class="text-xs text-gray-500 mt-1">* ติดต่อผู้ดูแลระบบเพื่อแก้ไข</p>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทร (สามารถแก้ไขได้)</label>
+                  <input type="text" v-model="editForm.phone" placeholder="081-234-5678"
+                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                  <button type="button" @click="isEditingProfile = false" 
+                          class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    ยกเลิก
+                  </button>
+                  <button type="submit" 
+                          class="px-4 py-2 bg-sena-600 text-white rounded-lg hover:bg-sena-700 transition-colors flex items-center gap-2">
+                    <i class="fas fa-save"></i> บันทึกเบอร์โทร
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Add Customer Modal -->
+  <div v-if="showAddModal" v-cloak class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style="display: none;" :style="showAddModal ? 'display: flex;' : 'display: none;'">
+    <div class="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-800">เพิ่มลูกค้าใหม่</h3>
+        <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="p-6 overflow-y-auto">
+        <form @submit.prevent="addCustomer" class="space-y-4">
+          <!-- Customer Type -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              ประเภทลูกค้า <span class="text-red-500">*</span>
+            </label>
+            <select v-model="newCustomer.referralType" required
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+              <option value="">เลือกประเภทลูกค้า</option>
+              <option value="self">แนะนำตัวเอง</option>
+              <option value="friend">แนะนำเพื่อน</option>
+            </select>
+          </div>
+          
+          <!-- Name -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                ชื่อ <span class="text-red-500">*</span>
+              </label>
+              <input type="text" v-model="newCustomer.firstName" placeholder="ชื่อจริง" required
+                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                นามสกุล <span class="text-red-500">*</span>
+              </label>
+              <input type="text" v-model="newCustomer.lastName" placeholder="นามสกุล" required
+                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+            </div>
+          </div>
+          
+          <!-- Email -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
+            <input type="email" v-model="newCustomer.email" placeholder="example@email.com"
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+          </div>
+          
+          <!-- Phone & Project -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                เบอร์โทร <span class="text-red-500">*</span>
+              </label>
+              <input type="text" v-model="newCustomer.phone" placeholder="081-234-5678" required
+                     class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อโครงการ</label>
+              <select v-model="newCustomer.projectId"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+                <option value="">เลือกโครงการ</option>
+                <option v-for="project in projects" :key="project.id" :value="project.id">
+                  {{ project.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Budget -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              งบประมาณ <span class="text-red-500">*</span>
+            </label>
+            <select v-model="newCustomer.budget" required
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+              <option value="">เลือกงบประมาณ</option>
+              <option value="1000000-3000000">1-3 ล้านบาท</option>
+              <option value="3000000-5000000">3-5 ล้านบาท</option>
+              <option value="5000000-10000000">5-10 ล้านบาท</option>
+              <option value="10000000-20000000">10-20 ล้านบาท</option>
+              <option value="20000000+">20 ล้านบาทขึ้นไป</option>
+            </select>
+          </div>
+          
+          <!-- ID Card -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              เลขประจำตัวประชาชน <span class="text-red-500">*</span>
+            </label>
+            <input type="text" v-model="newCustomer.idCard" placeholder="1234567890123" maxlength="13" required
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none">
+          </div>
+          
+          <!-- Address -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ที่อยู่</label>
+            <textarea v-model="newCustomer.address" rows="3" placeholder="ที่อยู่สำหรับติดต่อ"
+                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sena-500 focus:border-sena-500 outline-none resize-none"></textarea>
+          </div>
+        </form>
+      </div>
+      
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+        <button @click="showAddModal = false" 
+                class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+          ยกเลิก
+        </button>
+        <button @click="addCustomer" 
+                class="px-4 py-2 bg-sena-600 text-white rounded-lg hover:bg-sena-700 transition-colors flex items-center gap-2">
+          <i class="fas fa-plus"></i> เพิ่ม
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vue 3 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script>
+    const { createApp, ref, computed } = Vue;
+
+    createApp({
+      setup() {
+        // State
+        const collapsed = ref(false);
+        const selectedMenu = ref('dashboard');
+        const showUserMenu = ref(false);
+        const showAddModal = ref(false);
+        const isEditingProfile = ref(false);
+        const searchQuery = ref('');
+        const statusFilter = ref('all');
+
+        // User Data
+        const user = ref({
+          firstName: 'สมชาย',
+          lastName: 'ใจดี',
+          agentCode: 'AGT001',
+          email: 'somchai@example.com',
+          phone: '081-234-5678'
+        });
+
+        const editForm = ref({
+          phone: user.value.phone
+        });
+
+        // Menu Titles
+        const menuTitles = {
+          dashboard: 'แดชบอร์ด',
+          customers: 'ลูกค้าของฉัน',
+          profile: 'ข้อมูลส่วนตัว'
+        };
+
+        // Projects (mock data)
+        const projects = ref([
+          { id: 1, name: 'SENA วิภาวดี' },
+          { id: 2, name: 'SENA รามอินทรา' },
+          { id: 3, name: 'SENA สุขุมวิท' },
+          { id: 4, name: 'SENA ลาดพร้าว' }
+        ]);
+
+        // Customers (mock data)
+        const customers = ref([
+          {
+            id: 1,
+            customerCode: 'CUST001',
+            firstName: 'วิชัย',
+            lastName: 'รักดี',
+            email: 'wichai@example.com',
+            phone: '089-123-4567',
+            projectName: 'SENA วิภาวดี',
+            budgetMin: 3000000,
+            budgetMax: 5000000,
+            status: 'approved',
+            registrationDate: '2024-03-20'
+          },
+          {
+            id: 2,
+            customerCode: 'CUST002',
+            firstName: 'สุดา',
+            lastName: 'แสงจันทร์',
+            email: 'suda@example.com',
+            phone: '086-987-6543',
+            projectName: 'SENA รามอินทรา',
+            budgetMin: 5000000,
+            budgetMax: 10000000,
+            status: 'pending',
+            registrationDate: '2024-03-18'
+          },
+          {
+            id: 3,
+            customerCode: 'CUST003',
+            firstName: 'ประเสริฐ',
+            lastName: 'มากมี',
+            email: 'prasert@example.com',
+            phone: '085-555-5555',
+            projectName: 'SENA สุขุมวิท',
+            budgetMin: 10000000,
+            budgetMax: 20000000,
+            status: 'duplicate',
+            registrationDate: '2024-03-15'
+          },
+          {
+            id: 4,
+            customerCode: 'CUST004',
+            firstName: 'กัญญา',
+            lastName: 'วัฒนา',
+            email: 'kanya@example.com',
+            phone: '087-777-7777',
+            projectName: 'SENA ลาดพร้าว',
+            budgetMin: 1000000,
+            budgetMax: 3000000,
+            status: 'approved',
+            registrationDate: '2024-03-10'
+          }
+        ]);
+
+        // New Customer Form
+        const newCustomer = ref({
+          referralType: '',
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          projectId: '',
+          budget: '',
+          idCard: '',
+          address: ''
+        });
+
+        // Computed
+        const approvedCount = computed(() => customers.value.filter(c => c.status === 'approved').length);
+        const pendingCount = computed(() => customers.value.filter(c => c.status === 'pending').length);
+        const duplicateCount = computed(() => customers.value.filter(c => c.status === 'duplicate').length);
+        const approvalRate = computed(() => {
+          if (customers.value.length === 0) return 0;
+          return Math.round((approvedCount.value / customers.value.length) * 100);
+        });
+
+        const recentCustomers = computed(() => {
+          return [...customers.value].sort((a, b) => new Date(b.registrationDate) - new Date(a.registrationDate)).slice(0, 5);
+        });
+
+        const filteredCustomers = computed(() => {
+          let result = customers.value;
+          
+          // Filter by status
+          if (statusFilter.value !== 'all') {
+            result = result.filter(c => c.status === statusFilter.value);
+          }
+          
+          // Filter by search
+          if (searchQuery.value) {
+            const query = searchQuery.value.toLowerCase();
+            result = result.filter(c => 
+              c.firstName.toLowerCase().includes(query) ||
+              c.lastName.toLowerCase().includes(query) ||
+              c.phone.includes(query) ||
+              c.email?.toLowerCase().includes(query)
+            );
+          }
+          
+          return result;
+        });
+
+        // Methods
+        const getStatusClass = (status) => {
+          const classes = {
+            pending: 'bg-orange-100 text-orange-700',
+            approved: 'bg-green-100 text-green-700',
+            duplicate: 'bg-red-100 text-red-700'
+          };
+          return `px-3 py-1 rounded-full text-xs font-medium ${classes[status] || 'bg-gray-100 text-gray-700'}`;
+        };
+
+        const getStatusText = (status) => {
+          const texts = {
+            pending: 'รอดำเนินการตรวจสอบ',
+            approved: 'ผู้ถูกแนะนำผ่านเงื่อนไข',
+            duplicate: 'ซ้ำกับฐานข้อมูลโครงการ'
+          };
+          return texts[status] || status;
+        };
+
+        const formatBudget = (customer) => {
+          if (!customer.budgetMin && !customer.budgetMax) return '-';
+          const min = customer.budgetMin?.toLocaleString('th-TH');
+          const max = customer.budgetMax?.toLocaleString('th-TH');
+          return `${min} - ${max} บาท`;
+        };
+
+        const formatDate = (date) => {
+          if (!date) return '-';
+          return new Date(date).toLocaleDateString('th-TH', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+        };
+
+        const addCustomer = () => {
+          // Parse budget
+          let budgetMin = null;
+          let budgetMax = null;
+          if (newCustomer.value.budget) {
+            if (newCustomer.value.budget === '20000000+') {
+              budgetMin = 20000000;
+            } else {
+              const [min, max] = newCustomer.value.budget.split('-').map(Number);
+              budgetMin = min;
+              budgetMax = max;
+            }
+          }
+
+          const customer = {
+            id: Date.now(),
+            customerCode: `CUST${String(customers.value.length + 1).padStart(3, '0')}`,
+            firstName: newCustomer.value.firstName,
+            lastName: newCustomer.value.lastName,
+            email: newCustomer.value.email,
+            phone: newCustomer.value.phone,
+            projectName: projects.value.find(p => p.id == newCustomer.value.projectId)?.name || '-',
+            budgetMin,
+            budgetMax,
+            status: 'pending',
+            registrationDate: new Date().toISOString().split('T')[0]
+          };
+
+          customers.value.unshift(customer);
+          showAddModal.value = false;
+          newCustomer.value = {
+            referralType: '',
+            firstName: '',
+            lastName: '',
+            email: '',
+            phone: '',
+            projectId: '',
+            budget: '',
+            idCard: '',
+            address: ''
+          };
+          alert('เพิ่มลูกค้าสำเร็จ!');
+        };
+
+        const updateProfile = () => {
+          user.value.phone = editForm.value.phone;
+          isEditingProfile.value = false;
+          alert('อัพเดทเบอร์โทรสำเร็จ!');
+        };
+
+        const logout = () => {
+          alert('ออกจากระบบ');
+        };
+
+        return {
+          collapsed,
+          selectedMenu,
+          showUserMenu,
+          showAddModal,
+          isEditingProfile,
+          searchQuery,
+          statusFilter,
+          user,
+          editForm,
+          menuTitles,
+          projects,
+          customers,
+          newCustomer,
+          approvedCount,
+          pendingCount,
+          duplicateCount,
+          approvalRate,
+          recentCustomers,
+          filteredCustomers,
+          getStatusClass,
+          getStatusText,
+          formatBudget,
+          formatDate,
+          addCustomer,
+          updateProfile,
+          logout
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

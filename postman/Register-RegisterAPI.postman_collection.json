@@ -1,0 +1,35 @@
+{
+  "info": {
+    "name": "SENA Register API",
+    "_postman_id": "b6f3d7d0-0000-4000-9000-000000000000",
+    "description": "Collection for POST /api/auth/register (create + activate)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "registerApiKey", "value": "<YOUR_API_KEY>" }
+  ],
+  "item": [
+    {
+      "name": "Register and Activate",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Api-Key", "value": "{{registerApiKey}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"สมชาย\",\n  \"lastName\": \"ใจดี\",\n  \"email\": \"user@example.com\",\n  \"idCard\": \"1101700201234\",\n  \"phone\": \"0812345678\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "auth", "register" ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

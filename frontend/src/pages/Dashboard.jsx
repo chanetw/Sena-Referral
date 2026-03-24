@@ -39,6 +39,7 @@ import AgentManagementNew from './AgentManagementNew';
 import CustomerManagement from './CustomerManagement';
 import ProjectManagement from './ProjectManagement';
 import ReportsPage from './ReportsPage';
+import SettingsPage from './SettingsPage';
 import StatisticsBarChart from '../components/charts/StatisticsBarChart';
 import CustomerStatusPieChart from '../components/charts/CustomerStatusPieChart';
 import TrendLineChart from '../components/charts/TrendLineChart';
@@ -145,6 +146,7 @@ const Dashboard = () => {
       key: 'settings',
       icon: <SettingOutlined />,
       label: 'ตั้งค่า',
+      onClick: () => setSelectedMenu('settings'),
     },
     {
       type: 'divider',
@@ -183,6 +185,11 @@ const Dashboard = () => {
       key: 'reports',
       icon: <BarChartOutlined />,
       label: 'รายงาน',
+    },
+    {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: 'ตั้งค่า',
     },
   ];
 
@@ -490,6 +497,8 @@ const Dashboard = () => {
         return <ProjectManagement />;
       case 'reports':
         return <ReportsPage />;
+      case 'settings':
+        return <SettingsPage />;
       default:
         return null;
     }

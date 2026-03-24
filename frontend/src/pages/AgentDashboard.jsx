@@ -35,10 +35,10 @@ import {
   UserAddOutlined
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { logoutUser, updateUser } from '../store/authSlice';
+import { logoutUser, updateUser, getCurrentUser } from '../store/authSlice';
 import { fetchCustomers } from '../store/customersSlice';
 import { useNavigate } from 'react-router-dom';
-import { projectsAPI, customersAPI } from '../services/api';
+import { agentsAPI, projectsAPI, customersAPI, productTypesAPI } from '../services/api';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -56,6 +56,14 @@ const AgentDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [productTypes, setProductTypes] = useState([]);
+  const [productTypesLoading, setProductTypesLoading] = useState(false);
+  const [isAddCustomerModalVisible, setIsAddCustomerModalVisible] = useState(false);
+
+  // Refresh user profile on mount to get latest name/info
+  useEffect(() => {
+    dispatch(getCurrentUser());
+  }, [dispatch]);
 
   // Load agent's customers on component mount
   useEffect(() => {
@@ -68,6 +76,14 @@ const AgentDashboard = () => {
       }));
     }
   }, [dispatch, user?.agentId]);
+
+  useEffect(() => {
+    if (isEditingProfile) {
+      profileForm.setFieldsValue({
+        phone: user?.phone || ''
+      });
+    }
+  }, [isEditingProfile, profileForm, user?.phone]);
 
   // Fetch active projects for dropdown
   useEffect(() => {
@@ -93,6 +109,25 @@ const AgentDashboard = () => {
     fetchProjects();
   }, []);
 
+  useEffect(() => {
+    const fetchProductTypes = async () => {
+      try {
+        setProductTypesLoading(true);
+        const response = await productTypesAPI.getAll();
+        setProductTypes(response.data || []);
+      } catch (error) {
+        notification.error({
+          message: 'เกิดข้อผิดพลาด',
+          description: 'ไม่สามารถโหลดข้อมูลประเภทสินค้าได้'
+        });
+      } finally {
+        setProductTypesLoading(false);
+      }
+    };
+
+    fetchProductTypes();
+  }, []);
+
   const handleLogout = () => {
     dispatch(logoutUser());
     navigate('/login');
@@ -100,9 +135,6 @@ const AgentDashboard = () => {
 
   const handleEditProfile = () => {
     setIsEditingProfile(true);
-    profileForm.setFieldsValue({
-      phone: user?.phone || ''
-    });
   };
 
   const handleCancelEdit = () => {
@@ -113,16 +145,7 @@ const AgentDashboard = () => {
   const handleUpdateProfile = async (values) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/agents/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(values)
-      });
-
-      const data = await response.json();
+      const data = await agentsAPI.updateProfile(values);
 
       if (data.success) {
         notification.success({
@@ -173,7 +196,9 @@ const AgentDashboard = () => {
         budgetMin,
         budgetMax,
         referralType: values.referralType,
+        productTypeIds: values.productTypeIds || [],
         agentId: user.agentId,
+        address: values.address || null,
         status: 'pending'
       };
 
@@ -192,7 +217,7 @@ const AgentDashboard = () => {
           page: 1,
           limit: 100
         }));
-        // Navigate back to customers list
+        setIsAddCustomerModalVisible(false);
         setSelectedMenu('customers');
       } else {
         throw new Error(data.message);
@@ -237,11 +262,6 @@ const AgentDashboard = () => {
       label: 'ลูกค้าของฉัน',
     },
     {
-      key: 'add-customer',
-      icon: <UserAddOutlined />,
-      label: 'เพิ่มข้อมูลลูกค้า',
-    },
-    {
       key: 'profile',
       icon: <ProfileOutlined />,
       label: 'ข้อมูลส่วนตัว',
@@ -251,18 +271,36 @@ const AgentDashboard = () => {
   // Filter customers for current agent
   const myCustomers = customers.filter(customer =>
     customer.agentId === user?.agentId
-  ).map(customer => ({
-    key: customer.id,
-    id: customer.id,
-    customerCode: customer.customerCode,
-    firstName: customer.firstName,
-    lastName: customer.lastName,
-    name: `${customer.firstName} ${customer.lastName}`,
-    email: customer.email,
-    phone: customer.phone,
-    status: customer.status,
-    registrationDate: customer.createdAt || customer.registrationDate || customer.created_at
-  }));
+  ).map(customer => {
+    // Find project name from projectsList or use project.projectName
+    let projectName = '-';
+    if (customer.project && customer.project.projectName) {
+      projectName = customer.project.projectName;
+    } else if (customer.projectId) {
+      const project = projects.find(p => p.id === customer.projectId);
+      projectName = project ? project.projectName : `Project ID: ${customer.projectId}`;
+    } else if (customer.projectName) {
+      projectName = customer.projectName;
+    }
+
+    return {
+      key: customer.id,
+      id: customer.id,
+      customerCode: customer.customerCode,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      name: `${customer.firstName} ${customer.lastName}`,
+      email: customer.email,
+      phone: customer.phone,
+      projectId: customer.projectId,
+      projectName: projectName,
+      budgetMin: customer.budgetMin,
+      budgetMax: customer.budgetMax,
+      productTypes: customer.productTypes || [],
+      status: customer.status,
+      registrationDate: customer.createdAt || customer.registrationDate || customer.created_at
+    };
+  });
 
   const customerColumns = [
     // Hidden: รหัสลูกค้า column
@@ -288,9 +326,55 @@ const AgentDashboard = () => {
       key: 'phone',
     },
     {
+      title: 'โครงการที่สนใจ',
+      dataIndex: 'projectName',
+      key: 'projectName',
+      render: (projectName) => projectName || '-'
+    },
+    {
+      title: 'งบประมาณ',
+      dataIndex: 'budgetMin',
+      key: 'budget',
+      width: 140,
+      render: (budgetMin, record) => {
+        if (record.budgetMin && record.budgetMax) {
+          const min = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(record.budgetMin);
+          const max = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(record.budgetMax);
+          return (
+            <div style={{ fontSize: '12px', lineHeight: '1.4' }}>
+              <div>{min}</div>
+              <div style={{ color: '#999' }}>-</div>
+              <div>{max}</div>
+            </div>
+          );
+        }
+        return '-';
+      }
+    },
+    {
+      title: 'Product Type',
+      dataIndex: 'productTypes',
+      key: 'productTypes',
+      width: 180,
+      render: (productTypes) => {
+        if (!productTypes || productTypes.length === 0) {
+          return '-';
+        }
+
+        return (
+          <Space size={[0, 4]} wrap>
+            {productTypes.map((productType) => (
+              <Tag color="cyan" key={productType.id}>{productType.name}</Tag>
+            ))}
+          </Space>
+        );
+      }
+    },
+    {
       title: 'สถานะ',
       dataIndex: 'status',
       key: 'status',
+      width: 200,
       render: (status) => {
         const statusConfig = {
           pending: {
@@ -390,7 +474,18 @@ const AgentDashboard = () => {
         );
       case 'customers':
         return (
-          <Card title="ลูกค้าของฉัน">
+          <Card
+            title="ลูกค้าของฉัน"
+            extra={
+              <Button
+                type="primary"
+                icon={<UserAddOutlined />}
+                onClick={() => setIsAddCustomerModalVisible(true)}
+              >
+                เพิ่มลูกค้าใหม่
+              </Button>
+            }
+          >
             <Table
               dataSource={myCustomers}
               columns={customerColumns}
@@ -408,295 +503,134 @@ const AgentDashboard = () => {
             />
           </Card>
         );
-      case 'add-customer':
-        return (
-          <Card title="เพิ่มข้อมูลลูกค้า">
-            <Form
-              form={addCustomerForm}
-              layout="vertical"
-              onFinish={handleAddCustomer}
-              style={{ maxWidth: '800px' }}
-            >
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    label="รหัสนายหน้า"
-                  >
-                    <Input
-                      value={`${user?.agentCode} - ${user?.firstName} ${user?.lastName}`}
-                      disabled
-                      style={{ backgroundColor: '#f5f5f5', color: '#000' }}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="referralType"
-                    label={<span>ประเภทลูกค้า <Text type="danger">*</Text></span>}
-                    rules={[{ required: true, message: 'กรุณาเลือกประเภทลูกค้า' }]}
-                  >
-                    <Select placeholder="เลือกประเภทลูกค้า">
-                      <Select.Option value="self">แนะนำตัวเอง</Select.Option>
-                      <Select.Option value="friend">แนะนำเพื่อน</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="firstName"
-                    label={<span>ชื่อ <Text type="danger">*</Text></span>}
-                    rules={[{ required: true, message: 'กรุณากรอกชื่อ' }]}
-                  >
-                    <Input placeholder="ชื่อ" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="lastName"
-                    label={<span>นามสกุล <Text type="danger">*</Text></span>}
-                    rules={[{ required: true, message: 'กรุณากรอกนามสกุล' }]}
-                  >
-                    <Input placeholder="นามสกุล" />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="email"
-                    label="Email"
-                    rules={[
-                      { type: 'email', message: 'รูปแบบอีเมลไม่ถูกต้อง' }
-                    ]}
-                  >
-                    <Input placeholder="email@example.com" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="phone"
-                    label={<span>เบอร์โทร <Text type="danger">*</Text></span>}
-                    rules={[
-                      { required: true, message: 'กรุณากรอกเบอร์โทร' },
-                      { pattern: /^[0-9-]+$/, message: 'เบอร์โทรควรเป็นตัวเลขและขีดกลางเท่านั้น' }
-                    ]}
-                  >
-                    <Input placeholder="081-234-5678" />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="idCard"
-                    label={<span>หมายเลขบัตรประชาชน <Text type="danger">*</Text></span>}
-                    rules={[
-                      { required: true, message: 'กรุณากรอกหมายเลขบัตรประชาชน' },
-                      { len: 13, message: 'หมายเลขบัตรประชาชนต้องมี 13 หลัก' },
-                      { pattern: /^[0-9]+$/, message: 'หมายเลขบัตรประชาชนควรเป็นตัวเลขเท่านั้น' }
-                    ]}
-                  >
-                    <Input placeholder="1234567890123" maxLength={13} />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="projectId"
-                    label="ชื่อโครงการ"
-                  >
-                    <Select
-                      placeholder="เลือกโครงการ"
-                      loading={projectsLoading}
-                      showSearch
-                      optionFilterProp="children"
-                      filterOption={(input, option) =>
-                        option.children.toLowerCase().includes(input.toLowerCase())
-                      }
-                    >
-                      {projects.map(project => (
-                        <Select.Option key={project.id} value={project.id}>
-                          {project.name || project.projectName}
-                        </Select.Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="budget"
-                    label={<span>งบประมาณ <Text type="danger">*</Text></span>}
-                    rules={[{ required: true, message: 'กรุณาเลือกงบประมาณ' }]}
-                  >
-                    <Select placeholder="เลือกงบประมาณ">
-                      <Select.Option value="1000000-3000000">1-3 ล้านบาท</Select.Option>
-                      <Select.Option value="3000000-5000000">3-5 ล้านบาท</Select.Option>
-                      <Select.Option value="5000000-10000000">5-10 ล้านบาท</Select.Option>
-                      <Select.Option value="10000000-20000000">10-20 ล้านบาท</Select.Option>
-                      <Select.Option value="20000000+">20 ล้านบาทขึ้นไป</Select.Option>
-                    </Select>
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Form.Item style={{ marginTop: '24px' }}>
-                <Space>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={loading}
-                    style={{
-                      background: 'linear-gradient(135deg, #00BCD4 0%, #0097A7 100%)',
-                      border: 'none'
-                    }}
-                  >
-                    บันทึกข้อมูล
-                  </Button>
-                  <Button onClick={() => addCustomerForm.resetFields()}>
-                    ล้างข้อมูล
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Form>
-          </Card>
-        );
       case 'profile':
         return (
-          <Card
-            title="ข้อมูลส่วนตัว"
-            extra={
-              !isEditingProfile && (
-                <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={handleEditProfile}
-                >
-                  แก้ไขเบอร์โทร
-                </Button>
-              )
-            }
-          >
-            {!isEditingProfile ? (
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                    <div>
-                      <Text strong>รหัสเอเจนต์:</Text>
-                      <br />
-                      <Text style={{ fontSize: '16px' }}>{user?.agentCode}</Text>
+          <div>
+            <Card
+              style={{
+                overflow: 'hidden',
+                border: 'none',
+                borderRadius: '16px',
+                boxShadow: '0 8px 24px rgba(0,21,41,.08)'
+              }}
+              styles={{ body: { padding: 0 } }}
+            >
+              <div style={{
+                background: 'linear-gradient(135deg, #1890ff 0%, #0050b3 100%)',
+                color: 'white',
+                padding: '32px 24px'
+              }}>
+                <Row gutter={[24, 24]} align="middle">
+                  <Col xs={24} md={16}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                      <div style={{
+                        width: '84px',
+                        height: '84px',
+                        background: 'rgba(255, 255, 255, 0.22)',
+                        border: '1px solid rgba(255, 255, 255, 0.28)',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '30px',
+                        fontWeight: 700,
+                        backdropFilter: 'blur(6px)',
+                        flexShrink: 0
+                      }}>
+                        {(user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '14px', opacity: 0.85, marginBottom: '6px' }}>โปรไฟล์เอเจนต์</div>
+                        <div style={{ fontSize: '28px', fontWeight: 700, lineHeight: 1.2, marginBottom: '8px' }}>
+                          {user?.firstName} {user?.lastName}
+                        </div>
+                        <div style={{ fontSize: '15px', opacity: 0.92, marginBottom: '12px' }}>
+                          {user?.agentCode} - เอเจนต์
+                        </div>
+                        <Tag color="green" style={{ borderRadius: '999px', paddingInline: '10px' }}>
+                          ใช้งาน
+                        </Tag>
+                      </div>
                     </div>
-                    <div>
-                      <Text strong>ชื่อ:</Text>
-                      <br />
-                      <Text style={{ fontSize: '16px' }}>{user?.firstName}</Text>
-                    </div>
-                    <div>
-                      <Text strong>นามสกุล:</Text>
-                      <br />
-                      <Text style={{ fontSize: '16px' }}>{user?.lastName}</Text>
-                    </div>
-                    <div>
-                      <Text strong>อีเมล:</Text>
-                      <br />
-                      <Text style={{ fontSize: '16px' }}>{user?.email}</Text>
-                    </div>
-                    <div>
-                      <Text strong>เบอร์โทร:</Text>
-                      <br />
-                      <Text style={{ fontSize: '16px' }}>{user?.phone || '-'}</Text>
-                    </div>
-                    <div>
-                      <Text strong>สถานะ:</Text>
-                      <br />
-                      <Tag color="green" style={{ fontSize: '14px' }}>
-                        ใช้งาน
-                      </Tag>
-                    </div>
-                  </Space>
-                </Col>
-              </Row>
-            ) : (
-              <Form
-                form={profileForm}
-                layout="vertical"
-                onFinish={handleUpdateProfile}
-                style={{ maxWidth: '600px' }}
-              >
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item
-                      label="รหัสเอเจนต์"
-                    >
-                      <Input value={user?.agentCode} disabled />
-                    </Form.Item>
                   </Col>
-                  <Col span={12}>
-                    <Form.Item
-                      label="อีเมล"
-                    >
-                      <Input value={user?.email} disabled />
-                    </Form.Item>
+                  <Col xs={24} md={8}>
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.14)',
+                      border: '1px solid rgba(255, 255, 255, 0.18)',
+                      borderRadius: '14px',
+                      padding: '16px',
+                      textAlign: 'left'
+                    }}>
+                      <div style={{ fontSize: '13px', opacity: 0.82, marginBottom: '6px' }}>ช่องทางติดต่อหลัก</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>{user?.phone || '-'}</div>
+                      <div style={{ fontSize: '13px', opacity: 0.82 }}>สามารถแก้ไขได้จากปุ่มด้านล่าง</div>
+                    </div>
                   </Col>
                 </Row>
+              </div>
 
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item
-                      label="ชื่อ"
+              <div style={{ padding: '24px' }}>
+                <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+                  <Col xs={24} lg={16}>
+                    <Card
+                      title="ข้อมูลส่วนตัว"
+                      style={{ borderRadius: '14px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}
                     >
-                      <Input value={user?.firstName} disabled />
-                      <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                        * ติดต่อผู้ดูแลระบบเพื่อแก้ไข
-                      </div>
-                    </Form.Item>
+                      <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12}>
+                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
+                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>รหัสเอเจนต์</div>
+                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.agentCode || '-'}</div>
+                          </Card>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
+                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>อีเมล</div>
+                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626', wordBreak: 'break-word' }}>{user?.email || '-'}</div>
+                          </Card>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
+                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>ชื่อ</div>
+                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.firstName || '-'}</div>
+                          </Card>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
+                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>นามสกุล</div>
+                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.lastName || '-'}</div>
+                          </Card>
+                        </Col>
+                      </Row>
+                    </Card>
                   </Col>
-                  <Col span={12}>
-                    <Form.Item
-                      label="นามสกุล"
+                  <Col xs={24} lg={8}>
+                    <Card
+                      title="การติดต่อ"
+                      style={{ borderRadius: '14px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', height: '100%' }}
                     >
-                      <Input value={user?.lastName} disabled />
-                      <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                        * ติดต่อผู้ดูแลระบบเพื่อแก้ไข
+                      <div style={{
+                        background: '#f5faff',
+                        border: '1px solid #d6e4ff',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        marginBottom: '16px'
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>เบอร์โทรปัจจุบัน</div>
+                        <div style={{ fontSize: '22px', fontWeight: 700, color: '#0050b3', lineHeight: 1.2 }}>{user?.phone || '-'}</div>
                       </div>
-                    </Form.Item>
+                      <div style={{ color: '#8c8c8c', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
+                        หากต้องการเปลี่ยนเบอร์โทร สามารถกดปุ่มด้านล่างเพื่อเปิดหน้าต่างแก้ไขได้ทันที
+                      </div>
+                      <Button type="primary" block icon={<EditOutlined />} onClick={handleEditProfile}>
+                        แก้ไขเบอร์โทร
+                      </Button>
+                    </Card>
                   </Col>
                 </Row>
-
-                <Form.Item
-                  name="phone"
-                  label="เบอร์โทร (สามารถแก้ไขได้)"
-                  rules={[
-                    { pattern: /^[0-9-]+$/, message: 'เบอร์โทรควรเป็นตัวเลขและขีดกลางเท่านั้น' }
-                  ]}
-                >
-                  <Input placeholder="081-234-5678" />
-                </Form.Item>
-
-                <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-                  <Space>
-                    <Button onClick={handleCancelEdit}>
-                      ยกเลิก
-                    </Button>
-                    <Button
-                      type="primary"
-                      htmlType="submit"
-                      icon={<SaveOutlined />}
-                      loading={loading}
-                    >
-                      บันทึกเบอร์โทร
-                    </Button>
-                  </Space>
-                </Form.Item>
-              </Form>
-            )}
-          </Card>
+              </div>
+            </Card>
+          </div>
         );
       default:
         return null;
@@ -782,6 +716,255 @@ const AgentDashboard = () => {
           minHeight: 'calc(100vh - 112px)'
         }}>
           {renderContent()}
+
+          <Modal
+            title="เพิ่มลูกค้าใหม่"
+            open={isAddCustomerModalVisible}
+            onCancel={() => {
+              setIsAddCustomerModalVisible(false);
+              addCustomerForm.resetFields();
+            }}
+            footer={null}
+            width={700}
+            destroyOnHidden
+          >
+            <Form
+              form={addCustomerForm}
+              layout="vertical"
+              onFinish={handleAddCustomer}
+            >
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="referralType"
+                    label={<span>ประเภทลูกค้า <Text type="danger">*</Text></span>}
+                    rules={[{ required: true, message: 'กรุณาเลือกประเภทลูกค้า' }]}
+                  >
+                    <Select placeholder="เลือกประเภทลูกค้า">
+                      <Select.Option value="self">แนะนำตัวเอง</Select.Option>
+                      <Select.Option value="friend">แนะนำเพื่อน</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="firstName"
+                    label={<span>ชื่อ <Text type="danger">*</Text></span>}
+                    rules={[{ required: true, message: 'กรุณากรอกชื่อ' }]}
+                  >
+                    <Input placeholder="ชื่อจริง" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="lastName"
+                    label={<span>นามสกุล <Text type="danger">*</Text></span>}
+                    rules={[{ required: true, message: 'กรุณากรอกนามสกุล' }]}
+                  >
+                    <Input placeholder="นามสกุล" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item
+                name="email"
+                label="อีเมล"
+                rules={[{ type: 'email', message: 'รูปแบบอีเมลไม่ถูกต้อง' }]}
+              >
+                <Input placeholder="example@email.com" />
+              </Form.Item>
+
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="phone"
+                    label={<span>เบอร์โทร <Text type="danger">*</Text></span>}
+                    rules={[
+                      { required: true, message: 'กรุณากรอกเบอร์โทร' },
+                      { pattern: /^[0-9-]+$/, message: 'เบอร์โทรควรเป็นตัวเลขและขีดกลางเท่านั้น' }
+                    ]}
+                  >
+                    <Input placeholder="081-234-5678" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="projectId" label="ชื่อโครงการ">
+                    <Select
+                      placeholder="เลือกโครงการ"
+                      loading={projectsLoading}
+                      showSearch
+                      optionFilterProp="children"
+                      filterOption={(input, option) =>
+                        (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      allowClear
+                    >
+                      {projects.map(project => (
+                        <Select.Option key={project.id} value={project.id}>
+                          {project.name || project.projectName}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="budget"
+                    label={<span>งบประมาณ <Text type="danger">*</Text></span>}
+                    rules={[{ required: true, message: 'กรุณาเลือกงบประมาณ' }]}
+                  >
+                    <Select placeholder="เลือกงบประมาณ">
+                      <Select.Option value="1000000-3000000">1-3 ล้านบาท</Select.Option>
+                      <Select.Option value="3000000-5000000">3-5 ล้านบาท</Select.Option>
+                      <Select.Option value="5000000-10000000">5-10 ล้านบาท</Select.Option>
+                      <Select.Option value="10000000-20000000">10-20 ล้านบาท</Select.Option>
+                      <Select.Option value="20000000+">20 ล้านบาทขึ้นไป</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    name="productTypeIds"
+                    label="Product Type"
+                  >
+                    <Select
+                      mode="multiple"
+                      placeholder="เลือกประเภทสินค้า"
+                      allowClear
+                      loading={productTypesLoading}
+                      optionFilterProp="children"
+                      showSearch
+                    >
+                      {productTypes.map((productType) => (
+                        <Select.Option key={productType.id} value={productType.id}>
+                          {productType.name}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item
+                name="idCard"
+                label={<span>เลขประจำตัวประชาชน <Text type="danger">*</Text></span>}
+                rules={[
+                  { required: true, message: 'กรุณากรอกหมายเลขบัตรประชาชน' },
+                  { len: 13, message: 'หมายเลขบัตรประชาชนต้องมี 13 หลัก' },
+                  { pattern: /^[0-9]+$/, message: 'หมายเลขบัตรประชาชนควรเป็นตัวเลขเท่านั้น' }
+                ]}
+              >
+                <Input placeholder="1234567890123" maxLength={13} />
+              </Form.Item>
+
+              <Form.Item name="address" label="ที่อยู่">
+                <Input.TextArea rows={3} placeholder="ที่อยู่สำหรับติดต่อ" />
+              </Form.Item>
+
+              <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                <Space>
+                  <Button
+                    onClick={() => {
+                      setIsAddCustomerModalVisible(false);
+                      addCustomerForm.resetFields();
+                    }}
+                  >
+                    ยกเลิก
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    เพิ่ม
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          <Modal
+            title="แก้ไขเบอร์โทร"
+            open={isEditingProfile}
+            onCancel={handleCancelEdit}
+            footer={null}
+            width={560}
+            destroyOnHidden
+          >
+            <Form
+              form={profileForm}
+              layout="vertical"
+              onFinish={handleUpdateProfile}
+            >
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="รหัสเอเจนต์">
+                    <Input value={user?.agentCode} disabled />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="อีเมล">
+                    <Input value={user?.email} disabled />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="ชื่อ">
+                    <Input value={user?.firstName} disabled />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item label="นามสกุล">
+                    <Input value={user?.lastName} disabled />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <div
+                style={{
+                  background: '#fafafa',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  color: '#8c8c8c',
+                  fontSize: '13px'
+                }}
+              >
+                ชื่อ นามสกุล และอีเมลแก้ไขจากหน้านี้ไม่ได้ หากต้องการเปลี่ยนข้อมูลดังกล่าวให้ติดต่อผู้ดูแลระบบ
+              </div>
+
+              <Form.Item
+                name="phone"
+                label="เบอร์โทร"
+                rules={[
+                  { required: true, message: 'กรุณากรอกเบอร์โทร' },
+                  { pattern: /^[0-9-]+$/, message: 'เบอร์โทรควรเป็นตัวเลขและขีดกลางเท่านั้น' }
+                ]}
+              >
+                <Input placeholder="081-234-5678" />
+              </Form.Item>
+
+              <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+                <Space>
+                  <Button onClick={handleCancelEdit}>
+                    ยกเลิก
+                  </Button>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SaveOutlined />}
+                    loading={loading}
+                  >
+                    บันทึกเบอร์โทร
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </Modal>
         </Content>
       </Layout>
     </Layout>

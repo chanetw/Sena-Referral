@@ -14,11 +14,21 @@ const config = require('./src/config/config');
 const openapiSpec = require('./src/docs/openapi');
 const { initDatabase, testDatabaseConnection, sequelize } = require('./src/config/init-database');
 
+// Email Service
+const emailService = require('./src/services/emailService');
+const { templates: emailTemplates, isValidTemplate, getAvailableTemplates } = require('./src/templates/referralTemplates');
+
+// Initialize email service with database connection
+emailService.setDatabase(sequelize);
+
 // Import models
 const User = require('./src/models/User-cjs');
 const Agent = require('./src/models/Agent-cjs');
 const AgentType = require('./src/models/AgentType-cjs');
+const AgentTypeDetail = require('./src/models/AgentTypeDetail-cjs');
 const Customer = require('./src/models/Customer-cjs');
+const ProductType = require('./src/models/ProductType-cjs');
+const CustomerProductType = require('./src/models/CustomerProductType-cjs');
 const Project = require('./src/models/Project-cjs');
 
 // Define associations
@@ -62,6 +72,275 @@ Customer.belongsTo(Project, {
   as: 'project'
 });
 
+Customer.belongsToMany(ProductType, {
+  through: CustomerProductType,
+  foreignKey: 'customerId',
+  otherKey: 'productTypeId',
+  as: 'productTypes'
+});
+ProductType.belongsToMany(Customer, {
+  through: CustomerProductType,
+  foreignKey: 'productTypeId',
+  otherKey: 'customerId',
+  as: 'customers'
+});
+
+// Agent - AgentTypeDetail (One to One)
+Agent.hasOne(AgentTypeDetail, {
+  foreignKey: 'agentId',
+  as: 'typeDetail'
+});
+AgentTypeDetail.belongsTo(Agent, {
+  foreignKey: 'agentId'
+});
+AgentTypeDetail.belongsTo(Project, {
+  foreignKey: 'projectId',
+  as: 'residenceProject'
+});
+
+const getCustomerInclude = () => ([
+  {
+    model: Agent,
+    as: 'agent',
+    attributes: ['id', 'agentCode', 'firstName', 'lastName', 'email'],
+    required: false
+  },
+  {
+    model: Project,
+    as: 'project',
+    attributes: ['id', 'projectName'],
+    required: false
+  },
+  {
+    model: ProductType,
+    as: 'productTypes',
+    attributes: ['id', 'code', 'name', 'isActive', 'sortOrder'],
+    through: { attributes: [] },
+    required: false
+  }
+]);
+
+const normalizeProductTypeIds = (productTypeIds) => {
+  if (!Array.isArray(productTypeIds)) {
+    return [];
+  }
+
+  return [...new Set(
+    productTypeIds
+      .map((id) => parseInt(id, 10))
+      .filter((id) => Number.isInteger(id) && id > 0)
+  )];
+};
+
+const validateProductTypeIds = async (productTypeIds, transaction) => {
+  if (productTypeIds.length === 0) {
+    return true;
+  }
+
+  const existingProductTypes = await ProductType.findAll({
+    where: { id: productTypeIds },
+    attributes: ['id'],
+    transaction
+  });
+
+  return existingProductTypes.length === productTypeIds.length;
+};
+
+const syncCustomerProductTypes = async (customerId, productTypeIds, transaction) => {
+  await CustomerProductType.destroy({
+    where: { customerId },
+    transaction
+  });
+
+  if (productTypeIds.length === 0) {
+    return;
+  }
+
+  await CustomerProductType.bulkCreate(
+    productTypeIds.map((productTypeId) => ({
+      customerId,
+      productTypeId
+    })),
+    { transaction }
+  );
+};
+
+const NOTIFICATION_ACTION_TYPES = ['customer_created', 'agent_registered'];
+const NOTIFICATION_ACTION_SET = new Set(NOTIFICATION_ACTION_TYPES);
+const NOTIFICATION_SUBJECTS = {
+  customer_created: 'แจ้งเตือน: มีลูกค้าใหม่ในระบบ',
+  agent_registered: 'แจ้งเตือน: มีเอเจนต์ลงทะเบียนใหม่'
+};
+
+const normalizeRecipientEmails = (recipientEmails) => {
+  let values = [];
+
+  if (Array.isArray(recipientEmails)) {
+    values = recipientEmails;
+  } else if (typeof recipientEmails === 'string') {
+    const trimmed = recipientEmails.trim();
+    if (!trimmed) {
+      values = [];
+    } else {
+      try {
+        const parsed = JSON.parse(trimmed);
+        values = Array.isArray(parsed) ? parsed : [trimmed];
+      } catch (_) {
+        values = trimmed.split(',');
+      }
+    }
+  }
+
+  return [...new Set(
+    values
+      .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+      .filter((value) => value && isValidEmail(value))
+  )];
+};
+
+const formatNotificationRule = (ruleRow) => ({
+  id: ruleRow.id,
+  actionType: ruleRow.actionType,
+  recipientEmails: normalizeRecipientEmails(ruleRow.recipientEmails),
+  isActive: Boolean(ruleRow.isActive),
+  createdBy: ruleRow.createdBy,
+  updatedBy: ruleRow.updatedBy,
+  createdAt: ruleRow.createdAt,
+  updatedAt: ruleRow.updatedAt
+});
+
+const getNotificationRuleById = async (id) => {
+  const [rows] = await sequelize.query(
+    `SELECT
+      id,
+      action_type AS actionType,
+      recipient_emails AS recipientEmails,
+      is_active AS isActive,
+      created_by AS createdBy,
+      updated_by AS updatedBy,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+     FROM notification_rules
+     WHERE id = ?
+     LIMIT 1`,
+    { replacements: [id] }
+  );
+
+  return rows[0] || null;
+};
+
+const getNotificationRecipientsByAction = async (actionType) => {
+  if (!NOTIFICATION_ACTION_SET.has(actionType)) {
+    return [];
+  }
+
+  const [rows] = await sequelize.query(
+    `SELECT recipient_emails AS recipientEmails
+     FROM notification_rules
+     WHERE action_type = ? AND is_active = 1`,
+    { replacements: [actionType] }
+  );
+
+  return [...new Set(rows.flatMap((row) => normalizeRecipientEmails(row.recipientEmails)))];
+};
+
+const escapeHtml = (value) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const renderNotificationEmailHtml = (actionType, payload = {}) => {
+  const adminUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin/dashboard';
+  const generatedAt = payload.generatedAt || new Date().toLocaleString('th-TH', { hour12: false });
+  const rows = actionType === 'customer_created'
+    ? [
+      ['ประเภทเหตุการณ์', 'ลูกค้าใหม่'],
+      ['รหัสลูกค้า', payload.customerCode || '-'],
+      ['ชื่อลูกค้า', payload.customerName || '-'],
+      ['เอเจนต์', payload.agentName || '-'],
+      ['โครงการ', payload.projectName || '-'],
+      ['สถานะ', payload.status || '-'],
+      ['วันที่เวลา', generatedAt]
+    ]
+    : [
+      ['ประเภทเหตุการณ์', 'เอเจนต์ลงทะเบียนใหม่'],
+      ['รหัสเอเจนต์', payload.agentCode || '-'],
+      ['ชื่อเอเจนต์', payload.agentName || '-'],
+      ['อีเมล', payload.email || '-'],
+      ['สถานะบัญชี', payload.status || '-'],
+      ['วันที่เวลา', generatedAt]
+    ];
+
+  const detailRows = rows.map(([label, value]) => `
+    <tr>
+      <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;color:#6b7280;font-weight:600;width:160px;vertical-align:top;">${escapeHtml(label)}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;color:#111827;vertical-align:top;">${escapeHtml(value)}</td>
+    </tr>`).join('');
+
+  return `
+    <div style="background:#f7f7f7;padding:20px;font-family:Inter,Tahoma,Sana Serif,sans-serif;color:#333;line-height:1.6;">
+      <div style="max-width:760px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.06);">
+        <div style="background:#32bcad;background-image:linear-gradient(to right,#fff,#32bcad);padding:24px;">
+          <h1 style="margin:0;color:#1f2937;font-size:24px;">SENA HAPPY REFER</h1>
+          <p style="margin:4px 0 0;color:#1f2937;font-size:14px;">แจ้งเตือนจากระบบ</p>
+        </div>
+        <div style="padding:24px 32px;">
+          <p style="margin-top:0;"><strong>เรียน ทีมผู้ดูแลระบบ</strong></p>
+          <p style="margin-bottom:20px;">ระบบมีรายการใหม่ กรุณาตรวจสอบรายละเอียดด้านล่าง</p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">${detailRows}</table>
+          <a href="${escapeHtml(adminUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#32bcad;color:#fff;text-decoration:none;font-size:14px;font-weight:700;padding:10px 18px;border-radius:8px;">เปิดหน้าจัดการรายการ</a>
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0 0 10px 0;">ขอแสดงความนับถือ</p>
+            <p style="margin:0;">บริษัท เสนาดีเวลลอปเม้นท์ จำกัด (มหาชน)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const sendActionNotification = async (actionType, payload = {}) => {
+  const recipients = await getNotificationRecipientsByAction(actionType);
+  return sendNotificationToRecipients(actionType, recipients, payload);
+};
+
+const sendNotificationToRecipients = async (actionType, recipients = [], payload = {}) => {
+  if (!NOTIFICATION_ACTION_SET.has(actionType)) {
+    return { attempted: 0, sent: 0, failed: 0 };
+  }
+
+  const normalizedRecipients = normalizeRecipientEmails(recipients);
+  if (!normalizedRecipients.length) {
+    return { attempted: 0, sent: 0, failed: 0 };
+  }
+
+  const subject = NOTIFICATION_SUBJECTS[actionType] || 'แจ้งเตือนจากระบบ SENA HAPPY REFER';
+  const html = renderNotificationEmailHtml(actionType, payload);
+
+  const results = await Promise.allSettled(
+    normalizedRecipients.map((to) => emailService.sendEmail({
+      to,
+      subject,
+      html,
+      templateName: `notification_${actionType}`,
+      data: payload
+    }))
+  );
+
+  const failed = results.filter((result) => result.status === 'rejected').length;
+  if (failed > 0) {
+    console.error(`[Notification] ${actionType} failed to send ${failed}/${results.length} email(s)`);
+  }
+
+  return {
+    attempted: normalizedRecipients.length,
+    sent: normalizedRecipients.length - failed,
+    failed
+  };
+};
+
 const app = express();
 
 // Security middleware
@@ -101,7 +380,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Set charset middleware
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api') && req.path !== '/api/docs' && req.path !== '/api/docs/') {
+  const isSwaggerDocsRequest = req.path === '/api/docs' || req.path === '/api/docs/' || req.path.startsWith('/api/docs/');
+
+  if (req.path.startsWith('/api') && !isSwaggerDocsRequest) {
     res.set('Content-Type', 'application/json; charset=utf-8');
   }
   next();
@@ -151,7 +432,8 @@ app.get('/api', (req, res) => {
       agentTypes: '/api/agent-types',
       agents: '/api/agents/*',
       customers: '/api/customers/*',
-      projects: '/api/projects/*'
+      projects: '/api/projects/*',
+      emails: '/api/emails/*'
     }
   });
 });
@@ -181,6 +463,15 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // JWT helper functions
+const _jwtSecret = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error('[SECURITY] JWT_SECRET is not set in environment variables. Server will not start.');
+    process.exit(1);
+  }
+  return secret;
+})();
+
 const generateToken = (user) => {
   return jwt.sign(
     {
@@ -188,13 +479,13 @@ const generateToken = (user) => {
       email: user.email,
       role: user.role
     },
-    process.env.JWT_SECRET || 'dev-secret-sena-referral-2024',
+    _jwtSecret,
     { expiresIn: '24h' }
   );
 };
 
 const verifyToken = (token) => {
-  return jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-sena-referral-2024');
+  return jwt.verify(token, _jwtSecret);
 };
 
 const activationLimiter = rateLimit({
@@ -208,6 +499,68 @@ const activationLimiter = rateLimit({
   }
 });
 
+// Rate limiter สำหรับ /api/auth/register (server-to-server)
+const registerApiLimiter = rateLimit({
+  windowMs: config.registerApiKey.rateLimit.windowMs,
+  max: config.registerApiKey.rateLimit.maxRequests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'มีการเรียกใช้ API มากเกินไป กรุณาลองใหม่ภายหลัง'
+  }
+});
+
+// Middleware ตรวจสอบ API Key สำหรับ server-to-server endpoint
+// ใช้ timingSafeEqual เพื่อป้องกัน timing attack
+const checkRegisterApiKey = (req, res, next) => {
+  const configuredKey = config.registerApiKey.key;
+
+  // ถ้าไม่ได้ตั้งค่า API key ใน environment → ปิด endpoint ทันที
+  if (!configuredKey) {
+    return res.status(503).json({
+      success: false,
+      message: 'Endpoint นี้ยังไม่ได้เปิดใช้งาน กรุณาตั้งค่า REGISTER_API_KEY ใน environment',
+      errorType: 'service_unavailable'
+    });
+  }
+
+  const providedKey = req.headers['x-api-key'] || '';
+
+  if (!providedKey) {
+    return res.status(401).json({
+      success: false,
+      message: 'ต้องระบุ X-Api-Key header',
+      errorType: 'missing_api_key'
+    });
+  }
+
+  // ใช้ timingSafeEqual เพื่อป้องกัน timing attack
+  try {
+    const configuredBuf = Buffer.from(configuredKey);
+    const providedBuf = Buffer.from(providedKey);
+
+    if (
+      configuredBuf.length !== providedBuf.length ||
+      !crypto.timingSafeEqual(configuredBuf, providedBuf)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'API Key ไม่ถูกต้อง',
+        errorType: 'invalid_api_key'
+      });
+    }
+  } catch {
+    return res.status(401).json({
+      success: false,
+      message: 'API Key ไม่ถูกต้อง',
+      errorType: 'invalid_api_key'
+    });
+  }
+
+  next();
+};
+
 const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const AGENT_TYPE_CODE_ALIASES = {
@@ -219,7 +572,9 @@ const AGENT_TYPE_CODE_ALIASES = {
   sena_staff: 'sena_staff',
   sena_employee: 'sena_staff',
   partner: 'partner',
-  general: 'general'
+  general: 'general',
+  legacy_unknown: 'legacy_unknown',
+  unknown: 'legacy_unknown'
 };
 
 const isValidThaiPhone = (phone) => /^0\d{8,9}$/.test(phone);
@@ -345,6 +700,76 @@ const getNextAgentCode = async (transaction) => {
   }
 
   return `AG${nextNumber.toString().padStart(3, '0')}`;
+};
+
+const generatePendingDuplicateIdCard = async (originalIdCard, transaction) => {
+  let candidateIdCard = '';
+  let isUnique = false;
+
+  while (!isUnique) {
+    const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    candidateIdCard = `${originalIdCard.slice(0, 9)}${randomSuffix}`;
+
+    const existedAgent = await Agent.findOne({
+      where: { idCard: candidateIdCard },
+      attributes: ['id'],
+      transaction
+    });
+
+    isUnique = !existedAgent;
+  }
+
+  return candidateIdCard;
+};
+
+const notifyAdminsForDuplicateAgentRegistration = async ({ req, newAgent, matchedAgent, idCard, email }) => {
+  try {
+    const adminUsers = await User.findAll({
+      where: {
+        role: 'admin',
+        isActive: true
+      },
+      attributes: ['id']
+    });
+
+    if (!adminUsers.length) {
+      return;
+    }
+
+    const rawIp = req.headers['x-forwarded-for'] || req.ip || null;
+    const ipAddress = rawIp ? String(rawIp).split(',')[0].trim() : null;
+    const userAgent = req.get('user-agent') || null;
+    const notificationPayload = JSON.stringify({
+      type: 'agent_duplicate_idcard_pending',
+      message: 'มีการสมัครเอเจนต์ด้วยเลขบัตรประชาชนซ้ำ รอการตรวจสอบจากผู้ดูแลระบบ',
+      pendingAgentId: newAgent.id,
+      pendingAgentCode: newAgent.agentCode,
+      submittedIdCard: idCard,
+      submittedEmail: email,
+      matchedAgentId: matchedAgent?.id || null,
+      matchedAgentCode: matchedAgent?.agentCode || null
+    });
+
+    await Promise.all(adminUsers.map((admin) => sequelize.query(
+      `INSERT INTO activity_logs
+        (user_id, action, table_name, record_id, old_values, new_values, ip_address, user_agent, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      {
+        replacements: [
+          admin.id,
+          'agent_duplicate_idcard_pending',
+          'agents',
+          newAgent.id,
+          null,
+          notificationPayload,
+          ipAddress,
+          userAgent
+        ]
+      }
+    )));
+  } catch (error) {
+    console.error('[Admin Noti] Failed to create duplicate-agent notification:', error.message);
+  }
 };
 
 // Auth middleware
@@ -499,6 +924,7 @@ app.get('/api/auth/me', checkAuth, async (req, res) => {
           agentCode: agent.agentCode,
           firstName: agent.firstName,
           lastName: agent.lastName,
+          phone: agent.phone,
           status: agent.status,
           agentType: formatAgentType(agent.agentType)
         };
@@ -531,8 +957,6 @@ app.post('/api/auth/logout', (req, res) => {
 // Register agent endpoint
 app.post('/api/auth/register-agent', async (req, res) => {
   try {
-    console.log('=== Register Agent Request ===');
-    console.log('Request Body:', req.body);
 
     const {
       firstName,
@@ -540,7 +964,15 @@ app.post('/api/auth/register-agent', async (req, res) => {
       email,
       phone,
       idCard,
-      agentTypeCode
+      agentTypeCode,
+      referralCode,
+      houseNumber,
+      projectId,
+      department,
+      division,
+      companyName,
+      occupation,
+      knowSenaFrom
     } = req.body;
 
     // Basic validation
@@ -565,14 +997,16 @@ app.post('/api/auth/register-agent', async (req, res) => {
     }
 
     // Check if ID card already exists
-    const existingAgent = await Agent.findOne({ where: { idCard } });
-    if (existingAgent) {
-      return res.status(400).json({
-        success: false,
-        message: 'เลขประจำตัวประชาชนนี้ถูกใช้แล้ว',
-        errorType: 'idCard'
-      });
-    }
+    const existingAgent = await Agent.findOne({
+      where: {
+        [require('sequelize').Op.or]: [
+          { idCard },
+          { agentIdCard: idCard }
+        ]
+      },
+      attributes: ['id', 'agentCode', 'idCard', 'agentIdCard']
+    });
+    const isDuplicateIdCard = Boolean(existingAgent);
 
     // Check for duplicate phone (if provided)
     if (phone) {
@@ -615,28 +1049,71 @@ app.post('/api/auth/register-agent', async (req, res) => {
       role: 'agent'
     });
 
+    const finalAgentStatus = isDuplicateIdCard ? 'inactive' : 'active';
+    const storedIdCard = isDuplicateIdCard
+      ? await generatePendingDuplicateIdCard(idCard)
+      : idCard;
+
     // Create agent
     const newAgent = await Agent.create({
       userId: newUser.id,
       agentTypeId: agentType.id,
       agentCode: newAgentCode,
+      agentIdCard: idCard,
+      email,
       firstName,
       lastName,
       phone: phone || '',
-      idCard,
+      idCard: storedIdCard,
       registrationDate: new Date().toISOString().split('T')[0],
-      status: 'inactive' // Agent needs admin approval
+      status: finalAgentStatus,
+      duplicateLeadId: isDuplicateIdCard ? (existingAgent.agentCode || String(existingAgent.id)) : null
+    });
+
+    // Create agent type detail row
+    await AgentTypeDetail.create({
+      agentId: newAgent.id,
+      referralCode: referralCode || null,
+      houseNumber: houseNumber || null,
+      projectId: projectId || null,
+      department: department || null,
+      division: division || null,
+      companyName: companyName || null,
+      occupation: occupation || null,
+      knowSenaFrom: knowSenaFrom || null
+    });
+
+    if (isDuplicateIdCard) {
+      await notifyAdminsForDuplicateAgentRegistration({
+        req,
+        newAgent,
+        matchedAgent: existingAgent,
+        idCard,
+        email
+      });
+    }
+
+    await sendActionNotification('agent_registered', {
+      agentCode: newAgent.agentCode,
+      agentName: `${newAgent.firstName} ${newAgent.lastName}`,
+      email: newAgent.email,
+      status: newAgent.status,
+      requiresAdminReview: isDuplicateIdCard,
+      generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
     res.status(201).json({
       success: true,
-      message: 'ลงทะเบียนสำเร็จ รอการอนุมัติจากผู้ดูแลระบบ',
+      message: isDuplicateIdCard
+        ? 'ลงทะเบียนสำเร็จ แต่พบเลขบัตรประชาชนซ้ำ สถานะรอตรวจสอบจากผู้ดูแลระบบ'
+        : 'ลงทะเบียนสำเร็จ เปิดใช้งานบัญชีแล้ว',
       data: {
         agentCode: newAgent.agentCode,
         firstName: newAgent.firstName,
         lastName: newAgent.lastName,
         email: newUser.email,
         status: newAgent.status,
+        requiresAdminReview: isDuplicateIdCard,
         agentType: formatAgentType(agentType)
       }
     });
@@ -646,6 +1123,197 @@ app.post('/api/auth/register-agent', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'เกิดข้อผิดพลาดในการลงทะเบียน'
+    });
+  }
+});
+
+// ==================== UNIFIED REGISTER & ACTIVATE ENDPOINT ====================
+// Register and activate agent in one call (server-to-server, requires X-Api-Key)
+app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (req, res) => {
+  try {
+
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      idCard,
+      agentTypeCode
+    } = req.body;
+
+    // Basic validation
+    if (!firstName || !lastName || !email || !idCard) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณากรอกข้อมูลให้ครบถ้วน (ชื่อ, นามสกุล, อีเมล, เลขบัตรประชาชน)',
+        errorType: 'validation'
+      });
+    }
+
+    if (!isValidEmail(email.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบอีเมลไม่ถูกต้อง',
+        errorType: 'email'
+      });
+    }
+
+    if (!isValidIdCard(idCard)) {
+      return res.status(400).json({
+        success: false,
+        message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
+        errorType: 'idCard'
+      });
+    }
+
+    if (phone && !isValidThaiPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง (ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก)',
+        errorType: 'phone'
+      });
+    }
+
+    // Set password as ID card number
+    const password = idCard;
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'อีเมลนี้ถูกใช้แล้ว',
+        errorType: 'email'
+      });
+    }
+
+    // Check if ID card already exists
+    const existingAgent = await Agent.findOne({
+      where: {
+        [require('sequelize').Op.or]: [
+          { idCard },
+          { agentIdCard: idCard }
+        ]
+      },
+      attributes: ['id', 'agentCode', 'idCard', 'agentIdCard']
+    });
+    const isDuplicateIdCard = Boolean(existingAgent);
+
+    // Check for duplicate phone (if provided)
+    if (phone) {
+      const existingPhone = await Agent.findOne({ where: { phone } });
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          message: 'เบอร์โทรนี้ถูกใช้แล้ว',
+          errorType: 'phone'
+        });
+      }
+    }
+
+    const requestedAgentTypeCode = resolveAgentTypeCode(agentTypeCode || 'general');
+    const agentType = await getAgentTypeByCode(requestedAgentTypeCode) || await getDefaultAgentType();
+
+    if (!agentType) {
+      return res.status(400).json({
+        success: false,
+        message: 'ไม่พบประเภทเอเจนต์ที่ใช้งานได้',
+        errorType: 'agentTypeCode'
+      });
+    }
+
+    // Generate new agent code
+    const existingAgents = await Agent.findAll({ order: [['agentCode', 'DESC']] });
+    const existingCodes = existingAgents.map(a => a.agentCode);
+    let newAgentCode;
+    let codeNumber = 1;
+
+    do {
+      newAgentCode = `AG${String(codeNumber).padStart(3, '0')}`;
+      codeNumber++;
+    } while (existingCodes.includes(newAgentCode));
+
+    // Create user with isActive = true (activated immediately)
+    const newUser = await User.create({
+      email: email.toLowerCase(),
+      password,
+      role: 'agent',
+      isActive: true  // Mark as active immediately
+    });
+
+    const finalAgentStatus = isDuplicateIdCard ? 'inactive' : 'active';
+    const storedIdCard = isDuplicateIdCard
+      ? await generatePendingDuplicateIdCard(idCard)
+      : idCard;
+
+    // Create agent
+    const newAgent = await Agent.create({
+      userId: newUser.id,
+      agentTypeId: agentType.id,
+      agentCode: newAgentCode,
+      agentIdCard: idCard,
+      email: email.toLowerCase(),
+      firstName,
+      lastName,
+      phone: phone || '',
+      idCard: storedIdCard,
+      registrationDate: new Date().toISOString().split('T')[0],
+      status: finalAgentStatus,  // active or inactive if duplicate
+      duplicateLeadId: isDuplicateIdCard ? (existingAgent.agentCode || String(existingAgent.id)) : null
+    });
+
+    if (isDuplicateIdCard) {
+      await notifyAdminsForDuplicateAgentRegistration({
+        req,
+        newAgent,
+        matchedAgent: existingAgent,
+        idCard,
+        email: email.toLowerCase()
+      });
+    }
+
+    await sendActionNotification('agent_registered', {
+      agentCode: newAgent.agentCode,
+      agentName: `${newAgent.firstName} ${newAgent.lastName}`,
+      email: newAgent.email,
+      status: newAgent.status,
+      requiresAdminReview: isDuplicateIdCard,
+      generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
+    });
+
+    console.log('Register and activate success:', {
+      agentCode: newAgent.agentCode,
+      email: email.toLowerCase(),
+      status: newAgent.status,
+      isDuplicate: isDuplicateIdCard
+    });
+
+    res.status(201).json({
+      success: true,
+      message: isDuplicateIdCard
+        ? 'ลงทะเบียนและเปิดใช้งานบัญชีสำเร็จ แต่พบเลขบัตรประชาชนซ้ำ สถานะรอตรวจสอบจากผู้ดูแลระบบ'
+        : 'ลงทะเบียนและเปิดใช้งานบัญชีสำเร็จ',
+      data: {
+        agentCode: newAgent.agentCode,
+        firstName: newAgent.firstName,
+        lastName: newAgent.lastName,
+        email: newUser.email,
+        userStatus: newUser.isActive ? 'active' : 'inactive',
+        agentStatus: newAgent.status,
+        requiresAdminReview: isDuplicateIdCard,
+        agentType: formatAgentType(agentType),
+        loginInfo: {
+          email: newUser.email,
+          password: 'รหัสประชาชน 13 หลัก'
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Register and activate error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการลงทะเบียนและเปิดใช้งานบัญชี'
     });
   }
 });
@@ -718,14 +1386,16 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
       });
     }
 
-    const existingAgentByIdCard = await Agent.findOne({ where: { idCard: requestPayload.idCard } });
-    if (existingAgentByIdCard) {
-      return res.status(409).json({
-        success: false,
-        message: 'เลขประจำตัวประชาชนนี้ถูกใช้งานในระบบแล้ว',
-        errorType: 'idCard'
-      });
-    }
+    const existingAgentByIdCard = await Agent.findOne({
+      where: {
+        [require('sequelize').Op.or]: [
+          { idCard: requestPayload.idCard },
+          { agentIdCard: requestPayload.idCard }
+        ]
+      },
+      attributes: ['id', 'agentCode', 'idCard', 'agentIdCard']
+    });
+    const isDuplicateIdCard = Boolean(existingAgentByIdCard);
 
     if (requestPayload.phone) {
       const existingAgentByPhone = await Agent.findOne({ where: { phone: requestPayload.phone } });
@@ -756,18 +1426,43 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
       }, { transaction });
 
       const agentCode = await getNextAgentCode(transaction);
+      const storedIdCard = isDuplicateIdCard
+        ? await generatePendingDuplicateIdCard(requestPayload.idCard, transaction)
+        : requestPayload.idCard;
 
       return Agent.create({
         userId: user.id,
         agentTypeId: agentType.id,
         agentCode,
-        idCard: requestPayload.idCard,
+        agentIdCard: requestPayload.idCard,
+        email: requestPayload.email,
+        idCard: storedIdCard,
         firstName: requestPayload.firstName,
         lastName: requestPayload.lastName,
         phone: requestPayload.phone || '',
         registrationDate: new Date().toISOString().split('T')[0],
-        status: 'active'
+        status: isDuplicateIdCard ? 'inactive' : 'active',
+        duplicateLeadId: isDuplicateIdCard ? (existingAgentByIdCard.agentCode || String(existingAgentByIdCard.id)) : null
       }, { transaction });
+    });
+
+    if (isDuplicateIdCard) {
+      await notifyAdminsForDuplicateAgentRegistration({
+        req,
+        newAgent: createdAgent,
+        matchedAgent: existingAgentByIdCard,
+        idCard: requestPayload.idCard,
+        email: requestPayload.email
+      });
+    }
+
+    await sendActionNotification('agent_registered', {
+      agentCode: createdAgent.agentCode,
+      agentName: `${createdAgent.firstName} ${createdAgent.lastName}`,
+      email: createdAgent.email,
+      status: createdAgent.status,
+      requiresAdminReview: isDuplicateIdCard,
+      generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
     console.log('Activation registration success:', {
@@ -779,11 +1474,14 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
 
     return res.status(201).json({
       success: true,
-      message: 'เปิดใช้งานบัญชีสำเร็จ',
+      message: isDuplicateIdCard
+        ? 'ลงทะเบียนสำเร็จ แต่พบเลขบัตรประชาชนซ้ำ สถานะรอตรวจสอบจากผู้ดูแลระบบ'
+        : 'เปิดใช้งานบัญชีสำเร็จ',
       data: {
         agentCode: createdAgent.agentCode,
         email: requestPayload.email,
         status: createdAgent.status,
+        requiresAdminReview: isDuplicateIdCard,
         agentType: formatAgentType(agentType)
       }
     });
@@ -878,6 +1576,19 @@ app.get('/api/agents', checkAuth, async (req, res) => {
           as: 'agentType',
           attributes: ['id', 'code', 'nameTh'],
           required: false
+        },
+        {
+          model: AgentTypeDetail,
+          as: 'typeDetail',
+          required: false,
+          include: [
+            {
+              model: Project,
+              as: 'residenceProject',
+              attributes: ['id', 'projectName'],
+              required: false
+            }
+          ]
         }
       ],
       limit: parseInt(limit),
@@ -991,6 +1702,19 @@ app.get('/api/agents/:id', checkAuth, async (req, res) => {
           as: 'agentType',
           attributes: ['id', 'code', 'nameTh'],
           required: false
+        },
+        {
+          model: AgentTypeDetail,
+          as: 'typeDetail',
+          required: false,
+          include: [
+            {
+              model: Project,
+              as: 'residenceProject',
+              attributes: ['id', 'projectName'],
+              required: false
+            }
+          ]
         }
       ]
     });
@@ -1020,7 +1744,11 @@ app.get('/api/agents/:id', checkAuth, async (req, res) => {
 // POST /api/agents - Create new agent (for admin use)
 app.post('/api/agents', checkAuth, async (req, res) => {
   try {
-    const { email, firstName, lastName, phone, idCard, agentTypeCode } = req.body;
+    const {
+      email, firstName, lastName, phone, idCard, agentTypeCode,
+      referralCode, houseNumber, projectId, department, division,
+      companyName, occupation, knowSenaFrom
+    } = req.body;
 
     // Set password as ID card number if not provided
     const password = idCard;
@@ -1089,12 +1817,26 @@ app.post('/api/agents', checkAuth, async (req, res) => {
       userId: user.id,
       agentTypeId: agentType.id,
       agentCode,
+      email,
       idCard,
       firstName,
       lastName,
       phone: phone || '',
       registrationDate: new Date(),
       status: 'active'
+    });
+
+    // Create agent type detail row
+    await AgentTypeDetail.create({
+      agentId: agent.id,
+      referralCode: referralCode || null,
+      houseNumber: houseNumber || null,
+      projectId: projectId || null,
+      department: department || null,
+      division: division || null,
+      companyName: companyName || null,
+      occupation: occupation || null,
+      knowSenaFrom: knowSenaFrom || null
     });
 
     // Get agent with user info
@@ -1110,6 +1852,19 @@ app.post('/api/agents', checkAuth, async (req, res) => {
           as: 'agentType',
           attributes: ['id', 'code', 'nameTh'],
           required: false
+        },
+        {
+          model: AgentTypeDetail,
+          as: 'typeDetail',
+          required: false,
+          include: [
+            {
+              model: Project,
+              as: 'residenceProject',
+              attributes: ['id', 'projectName'],
+              required: false
+            }
+          ]
         }
       ]
     });
@@ -1125,128 +1880,6 @@ app.post('/api/agents', checkAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'เกิดข้อผิดพลาดในการสร้างเอเจนต์ใหม่'
-    });
-  }
-});
-
-// PUT /api/agents/:id - Update agent
-app.put('/api/agents/:id', checkAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { agentCode, firstName, lastName, phone, status } = req.body;
-
-    const agent = await Agent.findByPk(id);
-
-    if (!agent) {
-      return res.status(404).json({
-        success: false,
-        message: 'ไม่พบข้อมูลเอเจนต์'
-      });
-    }
-
-    // Check for duplicate agentCode (exclude current agent)
-    if (agentCode && agentCode !== agent.agentCode) {
-      const existingAgentCode = await Agent.findOne({
-        where: { agentCode, id: { [require('sequelize').Op.ne]: id } }
-      });
-      if (existingAgentCode) {
-        return res.status(400).json({
-          success: false,
-          message: 'รหัสเอเจนต์นี้มีอยู่ในระบบแล้ว'
-        });
-      }
-    }
-
-    // Check for duplicate phone (exclude current agent)
-    if (phone && phone !== agent.phone) {
-      const existingPhone = await Agent.findOne({
-        where: { phone, id: { [require('sequelize').Op.ne]: id } }
-      });
-      if (existingPhone) {
-        return res.status(400).json({
-          success: false,
-          message: 'เบอร์โทรศัพท์นี้มีอยู่ในระบบแล้ว'
-        });
-      }
-    }
-
-    // Update agent
-    await agent.update({
-      ...(agentCode && { agentCode }),
-      ...(firstName && { firstName }),
-      ...(lastName && { lastName }),
-      ...(phone && { phone }),
-      ...(status && { status })
-    });
-
-    // Get updated agent with user info
-    const updatedAgent = await Agent.findByPk(id, {
-      include: [
-        {
-          model: User,
-          attributes: ['email'],
-          required: false
-        }
-      ]
-    });
-
-    res.json({
-      success: true,
-      message: 'อัพเดทข้อมูลเอเจนต์สำเร็จ',
-      data: updatedAgent
-    });
-
-  } catch (error) {
-    console.error('Update agent error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'เกิดข้อผิดพลาดในการอัพเดทข้อมูลเอเจนต์'
-    });
-  }
-});
-
-// DELETE /api/agents/:id - Delete agent
-app.delete('/api/agents/:id', checkAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const agent = await Agent.findByPk(id);
-
-    if (!agent) {
-      return res.status(404).json({
-        success: false,
-        message: 'ไม่พบข้อมูลเอเจนต์'
-      });
-    }
-
-    // Check if agent has customers
-    const customerCount = await Customer.count({ where: { agentId: id } });
-
-    if (customerCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `ไม่สามารถลบเอเจนต์ได้ เนื่องจากมีลูกค้าที่เชื่อมโยงอยู่ ${customerCount} ราย`
-      });
-    }
-
-    // Delete user account first (will cascade to agent due to foreign key)
-    if (agent.userId) {
-      await User.destroy({ where: { id: agent.userId } });
-    }
-
-    // Delete agent record
-    await agent.destroy();
-
-    res.json({
-      success: true,
-      message: 'ลบเอเจนต์สำเร็จ'
-    });
-
-  } catch (error) {
-    console.error('Delete agent error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'เกิดข้อผิดพลาดในการลบเอเจนต์'
     });
   }
 });
@@ -1301,6 +1934,163 @@ app.put('/api/agents/profile', checkAuth, async (req, res) => {
   }
 });
 
+// PUT /api/agents/:id - Update agent
+app.put('/api/agents/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+      return res.status(403).json({
+        success: false,
+        message: 'ไม่มีสิทธิ์แก้ไขข้อมูลเอเจนต์'
+      });
+    }
+
+    const { id } = req.params;
+    const {
+      agentCode, firstName, lastName, phone, status,
+      referralCode, houseNumber, projectId, department, division,
+      companyName, occupation, knowSenaFrom
+    } = req.body;
+
+    const agent = await Agent.findByPk(id);
+
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบข้อมูลเอเจนต์'
+      });
+    }
+
+    // Check for duplicate agentCode (exclude current agent)
+    if (agentCode && agentCode !== agent.agentCode) {
+      const existingAgentCode = await Agent.findOne({
+        where: { agentCode, id: { [require('sequelize').Op.ne]: id } }
+      });
+      if (existingAgentCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'รหัสเอเจนต์นี้มีอยู่ในระบบแล้ว'
+        });
+      }
+    }
+
+    // Check for duplicate phone (exclude current agent)
+    if (phone && phone !== agent.phone) {
+      const existingPhone = await Agent.findOne({
+        where: { phone, id: { [require('sequelize').Op.ne]: id } }
+      });
+      if (existingPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'เบอร์โทรศัพท์นี้มีอยู่ในระบบแล้ว'
+        });
+      }
+    }
+
+    // Update agent
+    await agent.update({
+      ...(agentCode && { agentCode }),
+      ...(firstName && { firstName }),
+      ...(lastName && { lastName }),
+      ...(phone && { phone }),
+      ...(status && { status })
+    });
+
+    // Upsert agent type detail
+    const typeDetailFields = { referralCode, houseNumber, projectId, department, division, companyName, occupation, knowSenaFrom };
+    const hasTypeDetail = Object.values(typeDetailFields).some(v => v !== undefined);
+    if (hasTypeDetail) {
+      await AgentTypeDetail.upsert({
+        agentId: parseInt(id),
+        referralCode: referralCode !== undefined ? (referralCode || null) : undefined,
+        houseNumber: houseNumber !== undefined ? (houseNumber || null) : undefined,
+        projectId: projectId !== undefined ? (projectId || null) : undefined,
+        department: department !== undefined ? (department || null) : undefined,
+        division: division !== undefined ? (division || null) : undefined,
+        companyName: companyName !== undefined ? (companyName || null) : undefined,
+        occupation: occupation !== undefined ? (occupation || null) : undefined,
+        knowSenaFrom: knowSenaFrom !== undefined ? (knowSenaFrom || null) : undefined
+      });
+    }
+
+    // Get updated agent with user info
+    const updatedAgent = await Agent.findByPk(id, {
+      include: [
+        {
+          model: User,
+          attributes: ['email'],
+          required: false
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: 'อัพเดทข้อมูลเอเจนต์สำเร็จ',
+      data: updatedAgent
+    });
+
+  } catch (error) {
+    console.error('Update agent error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการอัพเดทข้อมูลเอเจนต์'
+    });
+  }
+});
+
+// DELETE /api/agents/:id - Delete agent
+app.delete('/api/agents/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถลบเอเจนต์ได้'
+      });
+    }
+
+    const { id } = req.params;
+
+    const agent = await Agent.findByPk(id);
+
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบข้อมูลเอเจนต์'
+      });
+    }
+
+    // Check if agent has customers
+    const customerCount = await Customer.count({ where: { agentId: id } });
+
+    if (customerCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `ไม่สามารถลบเอเจนต์ได้ เนื่องจากมีลูกค้าที่เชื่อมโยงอยู่ ${customerCount} ราย`
+      });
+    }
+
+    // Delete user account first (will cascade to agent due to foreign key)
+    if (agent.userId) {
+      await User.destroy({ where: { id: agent.userId } });
+    }
+
+    // Delete agent record
+    await agent.destroy();
+
+    res.json({
+      success: true,
+      message: 'ลบเอเจนต์สำเร็จ'
+    });
+
+  } catch (error) {
+    console.error('Delete agent error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการลบเอเจนต์'
+    });
+  }
+});
+
 // ==================== CUSTOMERS ENDPOINTS ====================
 
 // GET /api/customers - Get all customers
@@ -1340,20 +2130,8 @@ app.get('/api/customers', checkAuth, async (req, res) => {
 
     const { count, rows: customers } = await Customer.findAndCountAll({
       where: whereCondition,
-      include: [
-        {
-          model: Agent,
-          as: 'agent',
-          attributes: ['id', 'agentCode', 'firstName', 'lastName'],
-          required: false
-        },
-        {
-          model: Project,
-          as: 'project',
-          attributes: ['id', 'projectName'],
-          required: false
-        }
-      ],
+      include: getCustomerInclude(),
+      distinct: true,
       limit: parseInt(limit),
       offset: offset,
       order: [['created_at', 'DESC']]
@@ -1380,14 +2158,523 @@ app.get('/api/customers', checkAuth, async (req, res) => {
   }
 });
 
+// GET /api/product-types - Get product types
+app.get('/api/product-types', checkAuth, async (req, res) => {
+  try {
+    const includeInactive = req.query.includeInactive === 'true' && req.user.role === 'admin';
+    const where = includeInactive ? {} : { isActive: true };
+
+    const productTypes = await ProductType.findAll({
+      where,
+      order: [['sortOrder', 'ASC'], ['name', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      message: 'ดึงข้อมูลประเภทสินค้าสำเร็จ',
+      data: productTypes
+    });
+  } catch (error) {
+    console.error('Get product types error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการดึงข้อมูลประเภทสินค้า'
+    });
+  }
+});
+
+// POST /api/product-types - Create product type
+app.post('/api/product-types', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการประเภทสินค้าได้'
+      });
+    }
+
+    const { code, name, sortOrder = 0, isActive = true } = req.body;
+
+    if (!code || !name) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุรหัสและชื่อประเภทสินค้า'
+      });
+    }
+
+    const normalizedCode = code.trim();
+    const existingProductType = await ProductType.findOne({ where: { code: normalizedCode } });
+    if (existingProductType) {
+      return res.status(400).json({
+        success: false,
+        message: 'รหัสประเภทสินค้านี้มีอยู่ในระบบแล้ว'
+      });
+    }
+
+    const productType = await ProductType.create({
+      code: normalizedCode,
+      name: name.trim(),
+      sortOrder: parseInt(sortOrder, 10) || 0,
+      isActive: Boolean(isActive)
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'สร้างประเภทสินค้าสำเร็จ',
+      data: productType
+    });
+  } catch (error) {
+    console.error('Create product type error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการสร้างประเภทสินค้า'
+    });
+  }
+});
+
+// PUT /api/product-types/:id - Update product type
+app.put('/api/product-types/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการประเภทสินค้าได้'
+      });
+    }
+
+    const { id } = req.params;
+    const { code, name, sortOrder, isActive } = req.body;
+    const productType = await ProductType.findByPk(id);
+
+    if (!productType) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบข้อมูลประเภทสินค้า'
+      });
+    }
+
+    if (code && code !== productType.code) {
+      const existingProductType = await ProductType.findOne({ where: { code } });
+      if (existingProductType) {
+        return res.status(400).json({
+          success: false,
+          message: 'รหัสประเภทสินค้านี้มีอยู่ในระบบแล้ว'
+        });
+      }
+    }
+
+    await productType.update({
+      ...(code !== undefined && { code: code.trim() }),
+      ...(name !== undefined && { name: name.trim() }),
+      ...(sortOrder !== undefined && { sortOrder: parseInt(sortOrder, 10) || 0 }),
+      ...(isActive !== undefined && { isActive: Boolean(isActive) })
+    });
+
+    res.json({
+      success: true,
+      message: 'อัพเดทประเภทสินค้าสำเร็จ',
+      data: productType
+    });
+  } catch (error) {
+    console.error('Update product type error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการอัพเดทประเภทสินค้า'
+    });
+  }
+});
+
+// DELETE /api/product-types/:id - Soft delete product type
+app.delete('/api/product-types/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการประเภทสินค้าได้'
+      });
+    }
+
+    const { id } = req.params;
+    const productType = await ProductType.findByPk(id);
+
+    if (!productType) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบข้อมูลประเภทสินค้า'
+      });
+    }
+
+    await productType.update({ isActive: false });
+
+    res.json({
+      success: true,
+      message: 'ปิดใช้งานประเภทสินค้าสำเร็จ'
+    });
+  } catch (error) {
+    console.error('Delete product type error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการปิดใช้งานประเภทสินค้า'
+    });
+  }
+});
+
+// GET /api/notification-rules - List notification rules
+app.get('/api/notification-rules', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการ notification rules ได้'
+      });
+    }
+
+    const [rows] = await sequelize.query(
+      `SELECT
+        id,
+        action_type AS actionType,
+        recipient_emails AS recipientEmails,
+        is_active AS isActive,
+        created_by AS createdBy,
+        updated_by AS updatedBy,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+       FROM notification_rules
+       ORDER BY action_type ASC, id DESC`
+    );
+
+    res.json({
+      success: true,
+      message: 'ดึงข้อมูล notification rules สำเร็จ',
+      data: rows.map(formatNotificationRule)
+    });
+  } catch (error) {
+    console.error('Get notification rules error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการดึง notification rules'
+    });
+  }
+});
+
+// POST /api/notification-rules - Create notification rule
+app.post('/api/notification-rules', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการ notification rules ได้'
+      });
+    }
+
+    const { actionType, recipientEmails, isActive = true } = req.body;
+
+    if (!NOTIFICATION_ACTION_SET.has(actionType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ประเภทการแจ้งเตือนไม่ถูกต้อง'
+      });
+    }
+
+    const normalizedRecipients = normalizeRecipientEmails(recipientEmails);
+    if (normalizedRecipients.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุอีเมลผู้รับอย่างน้อย 1 รายการ'
+      });
+    }
+
+    const [insertResult, insertMeta] = await sequelize.query(
+      `INSERT INTO notification_rules (action_type, recipient_emails, is_active, created_by, updated_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+      {
+        replacements: [
+          actionType,
+          JSON.stringify(normalizedRecipients),
+          Boolean(isActive),
+          req.user.id,
+          req.user.id
+        ]
+      }
+    );
+
+    const createdRuleId =
+      insertResult?.insertId ||
+      insertMeta?.insertId ||
+      insertMeta;
+
+    let createdRule = null;
+    if (createdRuleId) {
+      createdRule = await getNotificationRuleById(createdRuleId);
+    }
+
+    if (!createdRule) {
+      const [fallbackRows] = await sequelize.query(
+        `SELECT
+          id,
+          action_type AS actionType,
+          recipient_emails AS recipientEmails,
+          is_active AS isActive,
+          created_by AS createdBy,
+          updated_by AS updatedBy,
+          created_at AS createdAt,
+          updated_at AS updatedAt
+         FROM notification_rules
+         WHERE action_type = ? AND created_by = ?
+         ORDER BY id DESC
+         LIMIT 1`,
+        { replacements: [actionType, req.user.id] }
+      );
+      createdRule = fallbackRows[0] || null;
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'สร้าง notification rule สำเร็จ',
+      data: createdRule ? formatNotificationRule(createdRule) : null
+    });
+  } catch (error) {
+    console.error('Create notification rule error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการสร้าง notification rule'
+    });
+  }
+});
+
+// PUT /api/notification-rules/:id - Update notification rule
+app.put('/api/notification-rules/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการ notification rules ได้'
+      });
+    }
+
+    const { id } = req.params;
+    const existingRule = await getNotificationRuleById(id);
+    if (!existingRule) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบ notification rule ที่ต้องการแก้ไข'
+      });
+    }
+
+    const updates = [];
+    const replacements = [];
+
+    if (req.body.actionType !== undefined) {
+      if (!NOTIFICATION_ACTION_SET.has(req.body.actionType)) {
+        return res.status(400).json({
+          success: false,
+          message: 'ประเภทการแจ้งเตือนไม่ถูกต้อง'
+        });
+      }
+      updates.push('action_type = ?');
+      replacements.push(req.body.actionType);
+    }
+
+    if (req.body.recipientEmails !== undefined) {
+      const normalizedRecipients = normalizeRecipientEmails(req.body.recipientEmails);
+      if (normalizedRecipients.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'กรุณาระบุอีเมลผู้รับอย่างน้อย 1 รายการ'
+        });
+      }
+      updates.push('recipient_emails = ?');
+      replacements.push(JSON.stringify(normalizedRecipients));
+    }
+
+    if (req.body.isActive !== undefined) {
+      updates.push('is_active = ?');
+      replacements.push(Boolean(req.body.isActive));
+    }
+
+    if (updates.length === 0) {
+      return res.json({
+        success: true,
+        message: 'ไม่มีข้อมูลเปลี่ยนแปลง',
+        data: formatNotificationRule(existingRule)
+      });
+    }
+
+    updates.push('updated_by = ?');
+    replacements.push(req.user.id);
+    updates.push('updated_at = NOW()');
+    replacements.push(id);
+
+    await sequelize.query(
+      `UPDATE notification_rules SET ${updates.join(', ')} WHERE id = ?`,
+      { replacements }
+    );
+
+    const updatedRule = await getNotificationRuleById(id);
+
+    res.json({
+      success: true,
+      message: 'อัปเดต notification rule สำเร็จ',
+      data: updatedRule ? formatNotificationRule(updatedRule) : null
+    });
+  } catch (error) {
+    console.error('Update notification rule error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการอัปเดต notification rule'
+    });
+  }
+});
+
+// POST /api/notification-rules/:id/test-send - Test send notification by rule
+app.post('/api/notification-rules/:id/test-send', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถทดสอบส่ง notification ได้'
+      });
+    }
+
+    const { id } = req.params;
+    const existingRule = await getNotificationRuleById(id);
+    if (!existingRule) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบ notification rule ที่ต้องการทดสอบ'
+      });
+    }
+
+    const recipients = normalizeRecipientEmails(existingRule.recipientEmails);
+    if (recipients.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ไม่พบอีเมลผู้รับสำหรับ notification rule นี้'
+      });
+    }
+
+    const generatedAt = new Date().toLocaleString('th-TH', { hour12: false });
+    const defaultPayload = existingRule.actionType === 'customer_created'
+      ? {
+        customerCode: 'TEST-CUST-001',
+        customerName: 'ลูกค้าทดสอบระบบ',
+        agentName: req.user?.name || req.user?.email || 'Admin',
+        projectName: 'โครงการทดสอบ',
+        status: 'pending',
+        generatedAt
+      }
+      : {
+        agentCode: 'TEST-AG001',
+        agentName: 'เอเจนต์ทดสอบระบบ',
+        email: req.user?.email || 'admin@test.com',
+        status: existingRule.isActive ? 'active' : 'inactive',
+        generatedAt
+      };
+
+    const customPayload = (req.body && typeof req.body.payload === 'object' && req.body.payload)
+      ? req.body.payload
+      : {};
+
+    const payload = {
+      ...defaultPayload,
+      ...customPayload,
+      generatedAt,
+      isTest: true
+    };
+
+    const result = await sendNotificationToRecipients(existingRule.actionType, recipients, payload);
+
+    res.json({
+      success: true,
+      message: `ส่งอีเมลทดสอบสำเร็จ ${result.sent}/${result.attempted} รายการ`,
+      data: {
+        ruleId: existingRule.id,
+        actionType: existingRule.actionType,
+        ...result
+      }
+    });
+  } catch (error) {
+    console.error('Test notification rule send error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการทดสอบส่ง notification'
+    });
+  }
+});
+
+// DELETE /api/notification-rules/:id - Delete notification rule
+app.delete('/api/notification-rules/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'เฉพาะผู้ดูแลระบบเท่านั้นที่สามารถจัดการ notification rules ได้'
+      });
+    }
+
+    const { id } = req.params;
+    const [deleteResult] = await sequelize.query(
+      'DELETE FROM notification_rules WHERE id = ?',
+      { replacements: [id] }
+    );
+
+    if (!deleteResult.affectedRows) {
+      return res.status(404).json({
+        success: false,
+        message: 'ไม่พบ notification rule ที่ต้องการลบ'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'ลบ notification rule สำเร็จ'
+    });
+  } catch (error) {
+    console.error('Delete notification rule error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการลบ notification rule'
+    });
+  }
+});
+
 // POST /api/customers - Create new customer
 app.post('/api/customers', checkAuth, async (req, res) => {
   try {
     const {
       customerCode, firstName, lastName, phone, email, idCard,
-      agentId, projectId, budgetMin, budgetMax,
-      status = 'new', source = 'referral', notes, referralType
+      projectId, budgetMin, budgetMax,
+      status = 'pending', source = 'referral', notes, referralType, productTypeIds
     } = req.body;
+    const normalizedProductTypeIds = normalizeProductTypeIds(productTypeIds);
+
+    // Resolve agentId: agents always use their own record; admin can specify
+    let agentId = req.body.agentId;
+    if (req.user.role === 'agent') {
+      const selfAgent = await Agent.findOne({ where: { userId: req.user.id } });
+      if (!selfAgent) {
+        return res.status(400).json({
+          success: false,
+          message: 'ไม่พบข้อมูลเอเจนต์สำหรับบัญชีนี้ กรุณาติดต่อผู้ดูแลระบบ'
+        });
+      }
+      agentId = selfAgent.id;
+    }
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุเอเจนต์'
+      });
+    }
+
+    const productTypesAreValid = await validateProductTypeIds(normalizedProductTypeIds);
+    if (!productTypesAreValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'พบประเภทสินค้าที่ไม่ถูกต้องในข้อมูลที่ส่งมา'
+      });
+    }
 
     // Check for duplicate customerCode
     if (customerCode) {
@@ -1433,53 +2720,45 @@ app.post('/api/customers', checkAuth, async (req, res) => {
       }
     }
 
-    // Verify agent exists
-    if (agentId) {
-      const agent = await Agent.findByPk(agentId);
-      if (!agent) {
-        return res.status(400).json({
-          success: false,
-          message: 'ไม่พบเอเจนต์ที่ระบุ'
-        });
-      }
-    }
+    let customerId;
+    await sequelize.transaction(async (transaction) => {
+      const customer = await Customer.create({
+        customerCode: customerCode || null,
+        firstName,
+        lastName,
+        phone: phone || null,
+        email: email || null,
+        idCard: idCard || null,
+        agentId,
+        projectId: projectId || null,
+        budgetMin: budgetMin !== undefined ? budgetMin : null,
+        budgetMax: budgetMax !== undefined ? budgetMax : null,
+        status,
+        source,
+        notes: notes || null,
+        referralType: referralType || null,
+        createdBy: req.user.id,
+        updatedBy: req.user.id
+      }, { transaction });
 
-    // Create customer
-    const customer = await Customer.create({
-      customerCode: customerCode || null,
-      firstName,
-      lastName,
-      phone: phone || null,
-      email: email || null,
-      idCard: idCard || null,
-      agentId: agentId || null,
-      projectId: projectId || null,
-      budgetMin: budgetMin || null,
-      budgetMax: budgetMax || null,
-      status,
-      source,
-      notes: notes || null,
-      referralType: referralType || null,
-      createdBy: req.user.id,
-      updatedBy: req.user.id
+      customerId = customer.id;
+      await syncCustomerProductTypes(customer.id, normalizedProductTypeIds, transaction);
     });
 
     // Get customer with relations
-    const customerWithRelations = await Customer.findByPk(customer.id, {
-      include: [
-        {
-          model: Agent,
-          as: 'agent',
-          attributes: ['id', 'agentCode', 'firstName', 'lastName'],
-          required: false
-        },
-        {
-          model: Project,
-          as: 'project',
-          attributes: ['id', 'projectName'],
-          required: false
-        }
-      ]
+    const customerWithRelations = await Customer.findByPk(customerId, {
+      include: getCustomerInclude()
+    });
+
+    await sendActionNotification('customer_created', {
+      customerCode: customerWithRelations?.customerCode || null,
+      customerName: `${customerWithRelations?.firstName || ''} ${customerWithRelations?.lastName || ''}`.trim(),
+      agentName: customerWithRelations?.agent
+        ? `${customerWithRelations.agent.agentCode || ''} ${customerWithRelations.agent.firstName || ''} ${customerWithRelations.agent.lastName || ''}`.trim()
+        : '-',
+      projectName: customerWithRelations?.project?.projectName || '-',
+      status: customerWithRelations?.status || 'pending',
+      generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
     res.status(201).json({
@@ -1539,20 +2818,7 @@ app.get('/api/customers/:id', checkAuth, async (req, res) => {
     const { id } = req.params;
 
     const customer = await Customer.findByPk(id, {
-      include: [
-        {
-          model: Agent,
-          as: 'agent',
-          attributes: ['id', 'agentCode', 'firstName', 'lastName'],
-          required: false
-        },
-        {
-          model: Project,
-          as: 'project',
-          attributes: ['id', 'projectName'],
-          required: false
-        }
-      ]
+      include: getCustomerInclude()
     });
 
     if (!customer) {
@@ -1584,8 +2850,10 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
     const {
       customerCode, firstName, lastName, phone, email, idCard,
       agentId, projectId, budgetMin, budgetMax,
-      status, source, notes, referralType
+      status, source, notes, referralType, productTypeIds
     } = req.body;
+    const normalizedProductTypeIds = normalizeProductTypeIds(productTypeIds);
+    const hasProductTypeIds = Object.prototype.hasOwnProperty.call(req.body, 'productTypeIds');
 
     const customer = await Customer.findByPk(id);
 
@@ -1594,6 +2862,16 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
         success: false,
         message: 'ไม่พบข้อมูลลูกค้า'
       });
+    }
+
+    if (hasProductTypeIds) {
+      const productTypesAreValid = await validateProductTypeIds(normalizedProductTypeIds);
+      if (!productTypesAreValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'พบประเภทสินค้าที่ไม่ถูกต้องในข้อมูลที่ส่งมา'
+        });
+      }
     }
 
     // Check for duplicate customerCode (exclude current customer)
@@ -1648,42 +2926,83 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
       }
     }
 
-    // Update customer
-    await customer.update({
-      ...(customerCode !== undefined && { customerCode: customerCode || null }),
-      ...(firstName && { firstName }),
-      ...(lastName && { lastName }),
-      ...(phone !== undefined && { phone: phone || null }),
-      ...(email !== undefined && { email: email || null }),
-      ...(idCard !== undefined && { idCard: idCard || null }),
-      ...(agentId !== undefined && { agentId: agentId || null }),
-      ...(projectId !== undefined && { projectId: projectId || null }),
-      ...(budgetMin !== undefined && { budgetMin: budgetMin || null }),
-      ...(budgetMax !== undefined && { budgetMax: budgetMax || null }),
-      ...(status && { status }),
-      ...(source && { source }),
-      ...(notes !== undefined && { notes: notes || null }),
-      ...(referralType !== undefined && { referralType: referralType || null }),
-      updatedBy: req.user.id
+    // Store old status for email trigger check
+    const oldStatus = customer.status;
+    
+    await sequelize.transaction(async (transaction) => {
+      await customer.update({
+        ...(customerCode !== undefined && { customerCode: customerCode || null }),
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(phone !== undefined && { phone: phone || null }),
+        ...(email !== undefined && { email: email || null }),
+        ...(idCard !== undefined && { idCard: idCard || null }),
+        ...(agentId !== undefined && { agentId: agentId || null }),
+        ...(projectId !== undefined && { projectId: projectId || null }),
+        ...(budgetMin !== undefined && { budgetMin: budgetMin }),
+        ...(budgetMax !== undefined && { budgetMax: budgetMax }),
+        ...(status && { status }),
+        ...(source && { source }),
+        ...(notes !== undefined && { notes: notes || null }),
+        ...(referralType !== undefined && { referralType: referralType || null }),
+        updatedBy: req.user.id
+      }, { transaction });
+
+      if (hasProductTypeIds) {
+        await syncCustomerProductTypes(customer.id, normalizedProductTypeIds, transaction);
+      }
     });
 
     // Get updated customer with relations
     const updatedCustomer = await Customer.findByPk(id, {
-      include: [
-        {
-          model: Agent,
-          as: 'agent',
-          attributes: ['id', 'agentCode', 'firstName', 'lastName'],
-          required: false
-        },
-        {
-          model: Project,
-          as: 'project',
-          attributes: ['id', 'projectName'],
-          required: false
-        }
-      ]
+      include: getCustomerInclude()
     });
+
+    // Trigger email notification when status changes from pending
+    if (oldStatus === 'pending' && status && status !== 'pending') {
+      try {
+        const agent = updatedCustomer.agent;
+        if (agent && agent.email) {
+          const isSelfReferral = updatedCustomer.referralType === 'self';
+          const customerName = `${updatedCustomer.firstName} ${updatedCustomer.lastName}`;
+          const agentName = `${agent.firstName} ${agent.lastName}`;
+          
+          let emailResult;
+          
+          if (status === 'approved') {
+            // Send approval email
+            emailResult = await emailService.sendReferralResult({
+              to: agent.email,
+              agentName,
+              customerName,
+              status: 'approved',
+              isSelfReferral
+            });
+            console.log(`[Email] Approval notification sent to ${agent.email} for customer ${customerName}`);
+          } else if (status === 'duplicate') {
+            // Send rejection email (duplicate)
+            emailResult = await emailService.sendReferralResult({
+              to: agent.email,
+              agentName,
+              customerName,
+              status: 'rejected',
+              reason: 'duplicate',
+              isSelfReferral
+            });
+            console.log(`[Email] Rejection notification (duplicate) sent to ${agent.email} for customer ${customerName}`);
+          }
+          
+          // Attach email result to response
+          updatedCustomer.emailNotification = emailResult || null;
+        } else {
+          console.warn(`[Email] Cannot send notification: Agent email not found for customer ${id}`);
+        }
+      } catch (emailError) {
+        // Log error but don't fail the update
+        console.error('[Email] Failed to send notification:', emailError.message);
+        updatedCustomer.emailNotification = { error: emailError.message };
+      }
+    }
 
     res.json({
       success: true,
@@ -1758,7 +3077,7 @@ app.get('/api/projects', checkAuth, async (req, res) => {
       where: whereClause,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [['created_at', 'DESC']],
+      order: [['id', 'ASC']],
     });
 
     const totalPages = Math.ceil(count / limit);
@@ -2054,6 +3373,252 @@ app.get('/api/dashboard/recent-activities', checkAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'เกิดข้อผิดพลาดในการดึงกิจกรรมล่าสุด'
+    });
+  }
+});
+
+// =================================
+// EMAIL ENDPOINTS
+// =================================
+
+// GET /api/emails/templates - Get all available email templates
+app.get('/api/emails/templates', checkAuth, async (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      templates: getAvailableTemplates()
+    }
+  });
+});
+
+// GET /api/emails/test-mode - Get test mode status
+app.get('/api/emails/test-mode', checkAuth, async (req, res) => {
+  const testModeStatus = emailService.getTestModeStatus();
+  res.json({
+    success: true,
+    data: testModeStatus
+  });
+});
+
+// GET /api/emails/verify-smtp - Verify SMTP connection
+app.get('/api/emails/verify-smtp', checkAuth, async (req, res) => {
+  try {
+    const result = await emailService.verifyConnection();
+    const testModeStatus = emailService.getTestModeStatus();
+    
+    res.json({
+      success: result.success,
+      message: result.success ? 'เชื่อมต่อ SMTP สำเร็จ' : 'เชื่อมต่อ SMTP ไม่สำเร็จ',
+      data: {
+        ...result,
+        testMode: testModeStatus
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'ตรวจสอบการเชื่อมต่อไม่สำเร็จ',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/emails/stats - Get email statistics
+app.get('/api/emails/stats', checkAuth, async (req, res) => {
+  try {
+    const stats = await emailService.getStats();
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'ดึงสถิติไม่สำเร็จ',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/emails/logs - Get email logs
+app.get('/api/emails/logs', checkAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const logs = await emailService.getRecentLogs(limit);
+    const parsedLogs = logs.map(log => ({
+      ...log,
+      data: log.data ? JSON.parse(log.data) : null
+    }));
+    res.json({
+      success: true,
+      data: {
+        count: parsedLogs.length,
+        logs: parsedLogs
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'ดึงประวัติไม่สำเร็จ',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/emails/send-template - Send email with template
+app.post('/api/emails/send-template', checkAuth, async (req, res) => {
+  try {
+    const { to, template, data, recipientName, cc, bcc } = req.body;
+
+    if (!to || !template) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุอีเมลผู้รับ (to) และ template'
+      });
+    }
+
+    if (!isValidTemplate(template)) {
+      return res.status(400).json({
+        success: false,
+        message: `Template ไม่ถูกต้อง: ${template}`,
+        availableTemplates: getAvailableTemplates()
+      });
+    }
+
+    const result = await emailService.sendTemplateEmail({
+      to,
+      template,
+      data: data || {},
+      recipientName,
+      cc,
+      bcc
+    });
+
+    res.json({
+      success: true,
+      message: 'ส่งอีเมลสำเร็จ',
+      data: result
+    });
+  } catch (error) {
+    console.error('[Email API] sendTemplateEmail error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'ส่งอีเมลไม่สำเร็จ',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/emails/send-referral-result - Send referral result notification
+app.post('/api/emails/send-referral-result', checkAuth, async (req, res) => {
+  try {
+    const { to, agentName, customerName, status, reason, isSelfReferral } = req.body;
+
+    if (!to || !agentName || !customerName || !status) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุ to, agentName, customerName และ status (approved/rejected)'
+      });
+    }
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'status ต้องเป็น approved หรือ rejected'
+      });
+    }
+
+    const result = await emailService.sendReferralResult({
+      to,
+      agentName,
+      customerName,
+      status,
+      reason,
+      isSelfReferral
+    });
+
+    res.json({
+      success: true,
+      message: `ส่งอีเมลแจ้งผล ${status === 'approved' ? 'อนุมัติ' : 'ไม่อนุมัติ'} สำเร็จ`,
+      data: result
+    });
+  } catch (error) {
+    console.error('[Email API] sendReferralResult error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'ส่งอีเมลไม่สำเร็จ',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/emails/preview - Preview template HTML
+app.post('/api/emails/preview', checkAuth, async (req, res) => {
+  try {
+    const { template, data } = req.body;
+
+    if (!template) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุ template'
+      });
+    }
+
+    if (!isValidTemplate(template)) {
+      return res.status(400).json({
+        success: false,
+        message: `Template ไม่ถูกต้อง: ${template}`,
+        availableTemplates: getAvailableTemplates()
+      });
+    }
+
+    const html = emailTemplates[template](data || {});
+    res.json({
+      success: true,
+      data: { html }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'สร้าง preview ไม่สำเร็จ',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/emails/test - Send test email
+app.post('/api/emails/test', checkAuth, async (req, res) => {
+  try {
+    const { to, template = 'FGF_Pass_2_agent' } = req.body;
+
+    if (!to) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุอีเมลผู้รับ (to)'
+      });
+    }
+
+    const result = await emailService.sendTemplateEmail({
+      to,
+      template,
+      data: {
+        refereeName: 'คุณทดสอบ ระบบ',
+        customerName: 'คุณกรรณิการ์ พวงผกา'
+      },
+      recipientName: 'คุณทดสอบ ระบบ'
+    });
+
+    res.json({
+      success: true,
+      message: 'ส่งอีเมลทดสอบสำเร็จ',
+      data: result
+    });
+  } catch (error) {
+    console.error('[Email API] sendTest error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'ส่งอีเมลทดสอบไม่สำเร็จ',
+      error: error.message
     });
   }
 });

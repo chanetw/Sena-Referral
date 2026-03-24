@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SENA HAPPY REFER: แจ้งเตือนรายการใหม่</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+            font-family: 'Inter', 'Tahoma', 'Sana Serif', sans-serif;
+            color: #333333;
+            line-height: 1.6;
+        }
+        .email-container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .header {
+            background-color: #32bcad;
+            background-image: linear-gradient(to right, #ffffff, #32bcad);
+            padding: 24px;
+        }
+        .header-wrap {
+            display: flex;
+            align-items: flex-start;
+        }
+        .logo {
+            width: 96px;
+            height: 32px;
+            margin-right: 16px;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .header-title {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #1f2937;
+        }
+        .header-subtitle {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 300;
+            color: #1f2937;
+        }
+        .content {
+            padding: 24px 32px;
+        }
+        .subject {
+            margin: 0 0 20px 0;
+            font-weight: 600;
+            color: #374151;
+        }
+        .highlight {
+            margin: 20px 0 28px;
+            padding: 14px 16px;
+            border-left: 4px solid #f59e0b;
+            border-radius: 6px;
+            background: #fffbeb;
+        }
+        .highlight-title {
+            margin: 0 0 6px 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: #92400e;
+        }
+        .highlight-text {
+            margin: 0;
+            font-size: 15px;
+            color: #111827;
+        }
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 6px 0 24px;
+        }
+        .detail-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: top;
+            font-size: 14px;
+        }
+        .detail-table td:first-child {
+            width: 180px;
+            color: #6b7280;
+            font-weight: 600;
+        }
+        .action-wrap {
+            margin: 24px 0 28px;
+        }
+        .action-btn {
+            display: inline-block;
+            background-color: #32bcad;
+            color: #ffffff !important;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 10px 18px;
+            border-radius: 8px;
+        }
+        .footer {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+        }
+        .company {
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .contact-box {
+            padding: 12px 14px;
+            background-color: #eff6ff;
+            border-left: 4px solid #32bcad;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .contact-box p {
+            margin: 0 0 4px 0;
+        }
+        .contact-title {
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 8px;
+        }
+        .muted {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 14px;
+        }
+        @media (max-width: 640px) {
+            .content {
+                padding: 20px;
+            }
+            .detail-table td:first-child {
+                width: 130px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="header-wrap">
+                <div class="logo">
+                    <img
+                        src="https://www.sena.co.th/images/logo-scroll.svg"
+                        alt="SENA Logo"
+                        onerror="this.onerror=null; this.src='https://placehold.co/96x32/10b981/ffffff?text=SENA';"
+                    />
+                </div>
+                <div>
+                    <h1 class="header-title">SENA HAPPY REFER</h1>
+                    <p class="header-subtitle">จดหมายแจ้งเตือนรายการใหม่จากระบบ</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content">
+            <p style="margin-top:0;"><strong>เรียน ทีมผู้ดูแลระบบ</strong></p>
+            <p class="subject">เรื่อง: แจ้งเตือนรายการใหม่ (ตัวอย่าง)</p>
+
+            <p>ระบบมีรายการใหม่ที่ต้องตรวจสอบ กรุณาเข้าตรวจสอบรายละเอียดในหน้าแอดมิน</p>
+
+            <div class="highlight">
+                <p class="highlight-title">เหตุการณ์ที่เกิดขึ้น</p>
+                <p class="highlight-text"><strong>{{event_type}}</strong> — {{event_summary}}</p>
+            </div>
+
+            <table class="detail-table" role="presentation" aria-label="รายละเอียดแจ้งเตือน">
+                <tr>
+                    <td>ประเภทการแจ้งเตือน</td>
+                    <td>{{event_type}}</td>
+                </tr>
+                <tr>
+                    <td>เลขอ้างอิง</td>
+                    <td>{{reference_id}}</td>
+                </tr>
+                <tr>
+                    <td>ชื่อผู้เกี่ยวข้อง</td>
+                    <td>{{person_name}}</td>
+                </tr>
+                <tr>
+                    <td>อีเมล</td>
+                    <td>{{person_email}}</td>
+                </tr>
+                <tr>
+                    <td>วันที่เวลา</td>
+                    <td>{{event_datetime}}</td>
+                </tr>
+                <tr>
+                    <td>ผู้สร้างรายการ</td>
+                    <td>{{created_by}}</td>
+                </tr>
+            </table>
+
+            <div class="action-wrap">
+                <a class="action-btn" href="{{admin_url}}" target="_blank" rel="noopener noreferrer">เปิดหน้าจัดการรายการ</a>
+            </div>
+
+            <div class="footer">
+                <p style="margin:0 0 10px 0;">ขอแสดงความนับถือ</p>
+                <div class="company">
+                    <p style="margin:0;">บริษัท เสนาดีเวลลอปเม้นท์ จำกัด (มหาชน)</p>
+                </div>
+
+                <div class="contact-box">
+                    <p class="contact-title">ติดต่อสอบถามได้ที่:</p>
+                    <p>ฝ่ายกำกับนโยบาย</p>
+                    <p>เบอร์โทร: 02-5414642 ต่อ 10411</p>
+                </div>
+            </div>
+
+            <p class="muted">
+                หมายเหตุ: ไฟล์นี้เป็นตัวอย่าง (sample) สำหรับการพัฒนา/ทดสอบ สามารถแทนค่า placeholder เช่น {{event_type}}, {{reference_id}}, {{admin_url}} ก่อนส่งจริง
+            </p>
+        </div>
+    </div>
+</body>
+</html>
