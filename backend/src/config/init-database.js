@@ -6,21 +6,34 @@ const Agent = require('../models/Agent');
 const Customer = require('../models/Customer');
 const Project = require('../models/Project');
 
+const MAX_RETRIES = parseInt(process.env.DB_CONNECT_RETRIES || '5', 10);
+const RETRY_DELAY_MS = parseInt(process.env.DB_CONNECT_RETRY_DELAY || '5000', 10);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const initDatabase = async () => {
-  try {
-    console.log('🔗 Testing database connection...');
-    await sequelize.authenticate();
-    console.log('✅ Database connection established successfully');
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`🔗 Testing database connection... (attempt ${attempt}/${MAX_RETRIES})`);
+      await sequelize.authenticate();
+      console.log('✅ Database connection established successfully');
 
-    console.log('🔄 Syncing database models...');
-    // ไม่ sync models เพราะเราใช้ SQL schema ที่มีอยู่แล้ว
-    // await sequelize.sync({ force: false });
-    console.log('✅ Database models synced successfully');
+      console.log('🔄 Syncing database models...');
+      // ไม่ sync models เพราะเราใช้ SQL schema ที่มีอยู่แล้ว
+      // await sequelize.sync({ force: false });
+      console.log('✅ Database models synced successfully');
 
-    return true;
-  } catch (error) {
-    console.error('❌ Unable to connect to database:', error.message);
-    throw error;
+      return true;
+    } catch (error) {
+      console.error(`❌ Unable to connect to database (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
+      if (attempt < MAX_RETRIES) {
+        console.log(`⏳ Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
+        await sleep(RETRY_DELAY_MS);
+      } else {
+        console.error('💀 All database connection attempts failed');
+        throw error;
+      }
+    }
   }
 };
 

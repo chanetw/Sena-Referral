@@ -1,0 +1,48 @@
+# =============================================================
+#  docker-compose.extdb.yml
+#  ใช้กับ External MySQL (ไม่รวม MySQL container)
+#  DevOps สร้าง MySQL เองบน server หรือใช้ managed database
+#
+#  Usage:
+#    docker compose -f docker-compose.extdb.yml pull
+#    docker compose -f docker-compose.extdb.yml up -d
+#
+#  แยก start:
+#    docker compose -f docker-compose.extdb.yml up api -d
+#    docker compose -f docker-compose.extdb.yml up web -d
+# =============================================================
+
+services:
+  # Backend API
+  api:
+    image: chanetw/sena-api:latest
+    container_name: sena_api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.extdb
+    ports:
+      - "4000:4000"
+    extra_hosts:
+      # ให้ container เข้าถึง MySQL บน host machine ได้
+      # ใช้ host.docker.internal ใน .env.extdb (DB_HOST)
+      - "host.docker.internal:host-gateway"
+    networks:
+      - sena_network
+
+  # Frontend Web App
+  web:
+    image: chanetw/sena-web:latest
+    container_name: sena_web
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env.prod
+    depends_on:
+      - api
+    ports:
+      - "3000:4173"
+    networks:
+      - sena_network
+
+networks:
+  sena_network:
+    driver: bridge
