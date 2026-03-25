@@ -22,12 +22,16 @@ import { notificationRulesAPI, productTypesAPI } from '../services/api';
 const { Title, Text } = Typography;
 const NOTIFICATION_ACTION_OPTIONS = [
   { value: 'customer_created', label: 'เพิ่มลูกค้าใหม่' },
-  { value: 'agent_registered', label: 'เอเจนต์ลงทะเบียนใหม่' }
+  { value: 'agent_registered', label: 'เอเจนต์ลงทะเบียนใหม่' },
+  { value: 'customer_approved', label: 'ลูกค้าผ่านการพิจารณา' },
+  { value: 'customer_rejected', label: 'ลูกค้าไม่ผ่านการพิจารณา' }
 ];
 
 const ACTION_LABEL_MAP = {
   customer_created: 'เพิ่มลูกค้าใหม่',
-  agent_registered: 'เอเจนต์ลงทะเบียนใหม่'
+  agent_registered: 'เอเจนต์ลงทะเบียนใหม่',
+  customer_approved: 'ลูกค้าผ่านการพิจารณา',
+  customer_rejected: 'ลูกค้าไม่ผ่านการพิจารณา'
 };
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -335,7 +339,7 @@ const SettingsPage = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <Title level={4} style={{ marginBottom: 4 }}>จัดการ Notification Rules</Title>
-              <Text type="secondary">ตั้งค่าอีเมลผู้รับสำหรับการแจ้งเตือนเมื่อเพิ่มลูกค้าใหม่ และเอเจนต์ลงทะเบียนใหม่</Text>
+              <Text type="secondary">ตั้งค่าอีเมลผู้รับสำหรับแจ้งเตือนเมื่อเพิ่มลูกค้าใหม่, เอเจนต์ลงทะเบียนใหม่, และผลพิจารณาลูกค้า (ผ่าน/ไม่ผ่าน)</Text>
             </div>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleNotificationCreate}>
               เพิ่ม Notification Rule

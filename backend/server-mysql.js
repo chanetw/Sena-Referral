@@ -165,11 +165,18 @@ const syncCustomerProductTypes = async (customerId, productTypeIds, transaction)
   );
 };
 
-const NOTIFICATION_ACTION_TYPES = ['customer_created', 'agent_registered'];
+const NOTIFICATION_ACTION_TYPES = [
+  'customer_created',
+  'agent_registered',
+  'customer_approved',
+  'customer_rejected'
+];
 const NOTIFICATION_ACTION_SET = new Set(NOTIFICATION_ACTION_TYPES);
 const NOTIFICATION_SUBJECTS = {
   customer_created: 'แจ้งเตือน: มีลูกค้าใหม่ในระบบ',
-  agent_registered: 'แจ้งเตือน: มีเอเจนต์ลงทะเบียนใหม่'
+  agent_registered: 'แจ้งเตือน: มีเอเจนต์ลงทะเบียนใหม่',
+  customer_approved: 'แจ้งเตือน: ลูกค้าผ่านการพิจารณา',
+  customer_rejected: 'แจ้งเตือน: ลูกค้าไม่ผ่านการพิจารณา'
 };
 
 const normalizeRecipientEmails = (recipientEmails) => {
@@ -254,14 +261,20 @@ const escapeHtml = (value) => String(value || '')
 const renderNotificationEmailHtml = (actionType, payload = {}) => {
   const adminUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin/dashboard';
   const generatedAt = payload.generatedAt || new Date().toLocaleString('th-TH', { hour12: false });
-  const rows = actionType === 'customer_created'
+  const customerStatus = actionType === 'customer_approved'
+    ? 'ผ่าน'
+    : actionType === 'customer_rejected'
+      ? 'ไม่ผ่าน'
+      : payload.status || '-';
+
+  const rows = actionType === 'customer_created' || actionType === 'customer_approved' || actionType === 'customer_rejected'
     ? [
-      ['ประเภทเหตุการณ์', 'ลูกค้าใหม่'],
+      ['ประเภทเหตุการณ์', actionType === 'customer_created' ? 'ลูกค้าใหม่' : 'ผลการพิจารณาลูกค้า'],
       ['รหัสลูกค้า', payload.customerCode || '-'],
       ['ชื่อลูกค้า', payload.customerName || '-'],
       ['เอเจนต์', payload.agentName || '-'],
       ['โครงการ', payload.projectName || '-'],
-      ['สถานะ', payload.status || '-'],
+      ['สถานะ', customerStatus],
       ['วันที่เวลา', generatedAt]
     ]
     : [
@@ -1127,6 +1140,76 @@ app.post('/api/auth/register-agent', async (req, res) => {
   }
 });
 
+// ==================== GENERATE ACTIVATION TOKEN (server-to-server) ====================
+// POST /api/auth/generate-activation-token — สร้าง activation JWT สำหรับส่งให้ระบบภายนอก
+// ป้องกันด้วย X-Api-Key เดียวกับ /api/auth/register
+app.post('/api/auth/generate-activation-token', registerApiLimiter, checkRegisterApiKey, (req, res) => {
+  const {
+    firstName,
+    lastName,
+    email,
+    phone = '',
+    idCard,
+    agentTypeCode = 'general',
+    refCode = '',
+    consent = true,
+    expiresIn = '10y'   // ระบบปิด: default อายุยาว 10 ปี
+  } = req.body;
+
+  // Validate required fields
+  const missing = ['firstName', 'lastName', 'email', 'idCard'].filter(f => !req.body[f]);
+  if (missing.length) {
+    return res.status(400).json({
+      success: false,
+      message: `กรุณากรอกข้อมูลให้ครบ: ${missing.join(', ')}`,
+      errorType: 'validation'
+    });
+  }
+
+  if (!isValidEmail(normalizeText(email).toLowerCase())) {
+    return res.status(400).json({ success: false, message: 'รูปแบบอีเมลไม่ถูกต้อง', errorType: 'email' });
+  }
+
+  if (!isValidIdCard(normalizeText(idCard))) {
+    return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก', errorType: 'idCard' });
+  }
+
+  const resolvedAgentTypeCode = resolveAgentTypeCode(agentTypeCode);
+  if (!AGENT_TYPE_CODE_ALIASES[resolvedAgentTypeCode]) {
+    return res.status(400).json({ success: false, message: 'ประเภทเอเจนต์ไม่ถูกต้อง', errorType: 'agentTypeCode' });
+  }
+
+  const payload = {
+    firstName: normalizeText(firstName),
+    lastName: normalizeText(lastName),
+    email: normalizeText(email).toLowerCase(),
+    phone: normalizeText(phone),
+    idCard: normalizeText(idCard),
+    agentTypeCode: resolvedAgentTypeCode,
+    refCode: normalizeText(refCode),
+    consent: Boolean(consent)
+  };
+
+  payload.fingerprint = buildActivationFingerprint(payload);
+
+  const secret = config.activation.secret;
+  const token = jwt.sign(payload, secret, {
+    issuer: config.activation.issuer,
+    audience: config.activation.audience,
+    expiresIn
+  });
+
+  return res.json({
+    success: true,
+    message: 'สร้าง activation token สำเร็จ',
+    data: {
+      activationToken: token,
+      expiresIn,
+      payload
+    }
+  });
+});
+
 // ==================== UNIFIED REGISTER & ACTIVATE ENDPOINT ====================
 // Register and activate agent in one call (server-to-server, requires X-Api-Key)
 app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (req, res) => {
@@ -1342,18 +1425,43 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
   }
 
   let activationClaims;
-  try {
-    activationClaims = jwt.verify(requestPayload.activationToken, config.activation.secret, {
-      issuer: config.activation.issuer,
-      audience: config.activation.audience,
-      maxAge: config.activation.maxAge
-    });
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: 'ลิงก์เปิดใช้งานไม่ถูกต้องหรือหมดอายุแล้ว',
-      errorType: 'activationToken'
-    });
+
+  // ถ้า activationToken ตรงกับ REGISTER_API_KEY → ระบบปิด: ยอมรับโดยตรงโดยใช้ข้อมูลจาก body เป็น claims
+  const configuredApiKey = config.registerApiKey.key;
+  const isApiKeyToken = configuredApiKey && (() => {
+    try {
+      const a = Buffer.from(configuredApiKey);
+      const b = Buffer.from(requestPayload.activationToken);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch { return false; }
+  })();
+
+  if (isApiKeyToken) {
+    // ใช้ข้อมูลจาก request body โดยตรง (ไม่ต้องมี JWT)
+    activationClaims = {
+      firstName: requestPayload.firstName,
+      lastName: requestPayload.lastName,
+      email: requestPayload.email,
+      phone: requestPayload.phone,
+      idCard: requestPayload.idCard,
+      agentTypeCode: requestPayload.agentTypeCode,
+      refCode: requestPayload.refCode,
+      consent: requestPayload.consent
+    };
+  } else {
+    try {
+      activationClaims = jwt.verify(requestPayload.activationToken, config.activation.secret, {
+        issuer: config.activation.issuer,
+        audience: config.activation.audience,
+        maxAge: config.activation.maxAge
+      });
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: 'ลิงก์เปิดใช้งานไม่ถูกต้องหรือหมดอายุแล้ว',
+        errorType: 'activationToken'
+      });
+    }
   }
 
   const mismatchField = assertActivationPayloadMatchesClaims(requestPayload, activationClaims);
@@ -2554,13 +2662,17 @@ app.post('/api/notification-rules/:id/test-send', checkAuth, async (req, res) =>
     }
 
     const generatedAt = new Date().toLocaleString('th-TH', { hour12: false });
-    const defaultPayload = existingRule.actionType === 'customer_created'
+    const defaultPayload = existingRule.actionType === 'customer_created' || existingRule.actionType === 'customer_approved' || existingRule.actionType === 'customer_rejected'
       ? {
         customerCode: 'TEST-CUST-001',
         customerName: 'ลูกค้าทดสอบระบบ',
         agentName: req.user?.name || req.user?.email || 'Admin',
         projectName: 'โครงการทดสอบ',
-        status: 'pending',
+        status: existingRule.actionType === 'customer_approved'
+          ? 'ผ่าน'
+          : existingRule.actionType === 'customer_rejected'
+            ? 'ไม่ผ่าน'
+            : 'pending',
         generatedAt
       }
       : {
@@ -2962,9 +3074,25 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
     if (oldStatus === 'pending' && status && status !== 'pending') {
       try {
         const agent = updatedCustomer.agent;
+        const customerName = `${updatedCustomer.firstName} ${updatedCustomer.lastName}`;
+        const agentNameForNotification = updatedCustomer?.agent
+          ? `${updatedCustomer.agent.agentCode || ''} ${updatedCustomer.agent.firstName || ''} ${updatedCustomer.agent.lastName || ''}`.trim()
+          : '-';
+        const projectNameForNotification = updatedCustomer?.project?.projectName || '-';
+
+        const triggerStatusNotification = async (actionType, statusText) => {
+          await sendActionNotification(actionType, {
+            customerCode: updatedCustomer?.customerCode || null,
+            customerName,
+            agentName: agentNameForNotification,
+            projectName: projectNameForNotification,
+            status: statusText,
+            generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
+          });
+        };
+
         if (agent && agent.email) {
           const isSelfReferral = updatedCustomer.referralType === 'self';
-          const customerName = `${updatedCustomer.firstName} ${updatedCustomer.lastName}`;
           const agentName = `${agent.firstName} ${agent.lastName}`;
           
           let emailResult;
@@ -2978,6 +3106,7 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
               status: 'approved',
               isSelfReferral
             });
+            await triggerStatusNotification('customer_approved', 'ผ่าน');
             console.log(`[Email] Approval notification sent to ${agent.email} for customer ${customerName}`);
           } else if (status === 'duplicate') {
             // Send rejection email (duplicate)
@@ -2989,6 +3118,7 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
               reason: 'duplicate',
               isSelfReferral
             });
+            await triggerStatusNotification('customer_rejected', 'ไม่ผ่าน');
             console.log(`[Email] Rejection notification (duplicate) sent to ${agent.email} for customer ${customerName}`);
           }
           
@@ -2996,6 +3126,12 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
           updatedCustomer.emailNotification = emailResult || null;
         } else {
           console.warn(`[Email] Cannot send notification: Agent email not found for customer ${id}`);
+
+          if (status === 'approved') {
+            await triggerStatusNotification('customer_approved', 'ผ่าน');
+          } else if (status === 'duplicate') {
+            await triggerStatusNotification('customer_rejected', 'ไม่ผ่าน');
+          }
         }
       } catch (emailError) {
         // Log error but don't fail the update

@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS notification_rules (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    action_type ENUM('customer_created', 'agent_registered') NOT NULL,
+    action_type ENUM('customer_created', 'agent_registered', 'customer_approved', 'customer_rejected') NOT NULL,
     recipient_emails TEXT NOT NULL COMMENT 'JSON array of recipients',
     is_active BOOLEAN DEFAULT true,
     created_by INT NULL,

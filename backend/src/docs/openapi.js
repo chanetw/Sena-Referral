@@ -177,7 +177,11 @@ const options = {
             userType: { type: 'string', example: 'general', description: 'Alias เดิมที่เว็บภายนอกส่งมาได้' },
             refCode: { type: 'string', example: 'REF-EMAIL' },
             consent: { type: 'boolean', example: true },
-            activationToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' }
+            activationToken: {
+              type: 'string',
+              example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+              description: 'รองรับทั้ง JWT token จาก `/api/auth/generate-activation-token` หรือค่า `REGISTER_API_KEY` โดยตรงในระบบปิด'
+            }
           }
         },
         ActivateRegistrationResponse: {
@@ -532,11 +536,73 @@ const options = {
           }
         }
       },
+      '/api/auth/generate-activation-token': {
+        post: {
+          tags: ['Auth'],
+          summary: '🔑 Generate Activation Token (ระบบปิด)',
+          description: 'สร้าง JWT activation token สำหรับนำไปใช้กับ `/api/auth/activate-registration`\n\nเหมาะสำหรับระบบปิดที่ไม่มี external registration web\n\n**Security**: ต้องใส่ `X-Api-Key` header (ค่า `REGISTER_API_KEY` ใน `.env`)\n\n**ขั้นตอน**:\n1. เรียก endpoint นี้ → ได้ `activationToken`\n2. นำ `activationToken` ไปใช้กับ `/api/auth/activate-registration`',
+          security: [{ ApiKeyAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['firstName', 'lastName', 'email', 'idCard'],
+                  properties: {
+                    firstName: { type: 'string', example: 'สมชาย', description: 'ชื่อจริง' },
+                    lastName: { type: 'string', example: 'ใจดี', description: 'นามสกุล' },
+                    email: { type: 'string', format: 'email', example: 'agent@example.com', description: 'อีเมล (ตรงกันกับที่จะส่งใน activate-registration)' },
+                    phone: { type: 'string', example: '0812345678', description: 'เบอร์โทร (ถ้ามี)' },
+                    idCard: { type: 'string', example: '1234567890123', description: 'เลขบัตรประชาชน 13 หลัก' },
+                    agentTypeCode: { type: 'string', example: 'general', description: 'ประเภทเอเจนต์', default: 'general' },
+                    refCode: { type: 'string', example: 'REF-EMAIL', description: 'รหัสอ้างอิง (ถ้ามี)' },
+                    consent: { type: 'boolean', example: true, default: true },
+                    expiresIn: { type: 'string', example: '10y', description: 'อายุ token เช่น 10y, 30d, 24h (default: 10y)', default: '10y' }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            200: {
+              description: 'Token สร้างสำเร็จ',
+              content: {
+                'application/json': {
+                  schema: {
+                    allOf: [
+                      { $ref: '#/components/schemas/ApiSuccess' },
+                      {
+                        type: 'object',
+                        properties: {
+                          data: {
+                            type: 'object',
+                            properties: {
+                              activationToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                              expiresIn: { type: 'string', example: '10y' },
+                              payload: {
+                                type: 'object',
+                                description: 'Claims ที่ฝังอยู่ใน token'
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            400: { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } },
+            401: { description: 'Invalid or missing X-Api-Key', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } } }
+          }
+        }
+      },
       '/api/auth/activate-registration': {
         post: {
           tags: ['Auth'],
           summary: 'สร้างและเปิดใช้งานบัญชีผู้ใช้จากระบบภายนอก',
-          description: 'Endpoint นี้ถูกเรียกโดยระบบภายนอก (External System) เพื่อสร้างและเปิดใช้งานบัญชีโดยตรง กระบวนการทำงาน: ระบบภายนอกส่ง payload (token + ข้อมูลผู้ใช้) มายัง endpoint นี้ → ระบบตรวจสอบ token → สร้าง user account และ agent record → ส่งผลลัพธ์กลับให้ระบบภายนอก',
+          description: 'สร้างและเปิดใช้งาน user account + agent record ในครั้งเดียว\n\n**activationToken รองรับ 2 รูปแบบ:**\n\n1. **JWT Token** — สร้างจาก `POST /api/auth/generate-activation-token` (สำหรับ external web)\n\n2. **REGISTER_API_KEY** (ระบบปิด/ทดสอบ) — ใส่ค่า `REGISTER_API_KEY` จาก `.env` โดยตรง เช่น `23ff3bf964027...` → ระบบจะใช้ข้อมูลจาก body โดยตรงโดยไม่ต้องสร้าง JWT ก่อน',
 
           requestBody: {
             required: true,

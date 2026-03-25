@@ -120,17 +120,24 @@ const CustomerManagement = () => {
   const [productTypes, setProductTypes] = useState([]);
   const [productTypesLoading, setProductTypesLoading] = useState(false);
 
+  const loadCustomers = (overrides = {}) => {
+    dispatch(fetchCustomers({
+      page: overrides.page ?? pagination.current,
+      limit: overrides.limit ?? pagination.pageSize,
+      status: overrides.status ?? filters.status,
+      agentId: overrides.agentId ?? filters.agentId,
+      search: overrides.search ?? filters.search
+    }));
+  };
+
   // Load customers, agents and projects on component mount
   useEffect(() => {
-    dispatch(fetchCustomers({
-      page: pagination.current,
-      limit: pagination.pageSize,
-      ...filters
-    }));
+    loadCustomers();
     dispatch(fetchAgentsList());
     fetchProjects();
     fetchProductTypes();
-  }, [dispatch, pagination.current, pagination.pageSize, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch]);
 
   // Fetch projects from API
   const fetchProjects = async () => {
@@ -196,6 +203,7 @@ const CustomerManagement = () => {
         description: `เปลี่ยนสถานะเป็น "${STATUS_CONFIG[selectedStatus].adminLabel}" สำเร็จ`,
       });
       setIsStatusModalVisible(false);
+      loadCustomers();
     } catch (error) {
       notification.error({
         message: 'เกิดข้อผิดพลาด',
@@ -473,28 +481,38 @@ const CustomerManagement = () => {
 
   // Handle search
   const handleSearch = (value) => {
-    dispatch(setFilters({ search: value }));
+    const nextSearch = value || '';
+    dispatch(setFilters({ search: nextSearch }));
     dispatch(setPagination({ current: 1 }));
+    loadCustomers({ page: 1, search: nextSearch });
   };
 
   // Handle status filter
   const handleStatusFilter = (value) => {
-    dispatch(setFilters({ status: value }));
+    const nextStatus = value || 'all';
+    dispatch(setFilters({ status: nextStatus }));
     dispatch(setPagination({ current: 1 }));
+    loadCustomers({ page: 1, status: nextStatus });
   };
 
   // Handle agent filter
   const handleAgentFilter = (value) => {
-    dispatch(setFilters({ agentId: value }));
+    const nextAgentId = value || 'all';
+    dispatch(setFilters({ agentId: nextAgentId }));
     dispatch(setPagination({ current: 1 }));
+    loadCustomers({ page: 1, agentId: nextAgentId });
   };
 
   // Handle table change (pagination)
-  const handleTableChange = (pagination) => {
+  const handleTableChange = (tablePagination) => {
     dispatch(setPagination({
-      current: pagination.current,
-      pageSize: pagination.pageSize
+      current: tablePagination.current,
+      pageSize: tablePagination.pageSize
     }));
+    loadCustomers({
+      page: tablePagination.current,
+      limit: tablePagination.pageSize
+    });
   };
 
   // Fetch next customer code
@@ -565,6 +583,7 @@ const CustomerManagement = () => {
         message: 'สำเร็จ',
         description: 'ลบลูกค้าสำเร็จ',
       });
+      loadCustomers();
     } catch (error) {
       notification.error({
         message: 'เกิดข้อผิดพลาด',
@@ -612,6 +631,7 @@ const CustomerManagement = () => {
       }
       setIsModalVisible(false);
       form.resetFields();
+      loadCustomers();
     } catch (error) {
       notification.error({
         message: 'เกิดข้อผิดพลาด',
@@ -660,6 +680,11 @@ const CustomerManagement = () => {
               allowClear
               enterButton={<SearchOutlined />}
               onSearch={handleSearch}
+              onChange={(e) => {
+                if (e.target.value === '') {
+                  handleSearch('');
+                }
+              }}
               defaultValue={filters.search}
             />
           </Col>
@@ -668,6 +693,7 @@ const CustomerManagement = () => {
               <Select
                 style={{ width: '100%' }}
                 placeholder="กรองตามสถานะ"
+                allowClear
                 value={filters.status}
                 onChange={handleStatusFilter}
               >
@@ -682,6 +708,7 @@ const CustomerManagement = () => {
             <Select
               style={{ width: '100%' }}
               placeholder="กรองตามเอเจนต์"
+              allowClear
               value={filters.agentId}
               onChange={handleAgentFilter}
               loading={agentsLoading}

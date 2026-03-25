@@ -100,15 +100,24 @@ class EmailService {
             throw new Error(`Invalid template: ${template}. Available: ${Object.keys(templates).join(', ')}`);
         }
 
-        // Check test mode - override recipient for safety
-        const testModeRecipient = process.env.MAIL_TEST_MODE_RECIPIENT;
+        // Check test/copy mode
+        const testModeRecipient = (process.env.MAIL_TEST_MODE_RECIPIENT || '').trim();
+        const copyMode = process.env.MAIL_COPY_TEST_RECIPIENT === 'true';
         let actualRecipient = to;
         let isTestMode = false;
+        let isCopyMode = false;
         
-        if (testModeRecipient && testModeRecipient.trim() !== '') {
-            actualRecipient = testModeRecipient;
-            isTestMode = true;
-            console.log(`[EmailService] TEST MODE: Redirecting email from ${to} to ${testModeRecipient}`);
+        if (testModeRecipient) {
+            if (copyMode) {
+                // COPY MODE: send to real recipient AND also send copy to test recipient
+                isCopyMode = true;
+                console.log(`[EmailService] COPY MODE: Sending to ${to} + copy to ${testModeRecipient}`);
+            } else {
+                // TEST MODE (classic): redirect only to test recipient
+                actualRecipient = testModeRecipient;
+                isTestMode = true;
+                console.log(`[EmailService] TEST MODE: Redirecting email from ${to} to ${testModeRecipient}`);
+            }
         }
 
         // Generate HTML from template
@@ -121,17 +130,17 @@ class EmailService {
             recipientName: recipientName || data.refereeName,
             templateName: template,
             subject,
-            data: { ...data, originalRecipient: to, isTestMode },
+            data: { ...data, originalRecipient: to, isTestMode, isCopyMode },
             status: 'pending'
         });
 
         try {
-            // Send email (use actualRecipient which may be test mode override)
+            // Send email to actual recipient
             const result = await this.transporter.sendMail({
                 from: `"${process.env.MAIL_FROM_NAME || 'SENA HAPPY REFER'}" <${process.env.MAIL_FROM_ADDRESS || process.env.MAIL_USERNAME}>`,
                 to: actualRecipient,
-                cc: isTestMode ? undefined : cc,  // Don't CC in test mode
-                bcc: isTestMode ? undefined : bcc, // Don't BCC in test mode
+                cc: isTestMode ? undefined : cc,
+                bcc: isTestMode ? undefined : bcc,
                 subject,
                 html,
                 attachments
@@ -144,6 +153,22 @@ class EmailService {
                 messageId: result.messageId
             });
 
+            // In copy mode, also send a copy to test mode recipient
+            if (isCopyMode && testModeRecipient && testModeRecipient !== actualRecipient) {
+                try {
+                    await this.transporter.sendMail({
+                        from: `"${process.env.MAIL_FROM_NAME || 'SENA HAPPY REFER'}" <${process.env.MAIL_FROM_ADDRESS || process.env.MAIL_USERNAME}>`,
+                        to: testModeRecipient,
+                        subject: subject + ` [COPY → ${to}]`,
+                        html,
+                        attachments
+                    });
+                    console.log(`[EmailService] COPY sent to ${testModeRecipient}`);
+                } catch (copyErr) {
+                    console.error(`[EmailService] Failed to send copy to ${testModeRecipient}:`, copyErr.message);
+                }
+            }
+
             return {
                 success: true,
                 messageId: result.messageId,
@@ -151,6 +176,8 @@ class EmailService {
                 to: actualRecipient,
                 originalRecipient: to,
                 isTestMode,
+                isCopyMode,
+                copyTo: isCopyMode ? testModeRecipient : undefined,
                 template,
                 subject
             };
@@ -193,15 +220,24 @@ class EmailService {
             attachments = [] 
         } = options;
 
-        // Check test mode - override recipient for safety
-        const testModeRecipient = process.env.MAIL_TEST_MODE_RECIPIENT;
+        // Check test/copy mode
+        const testModeRecipient = (process.env.MAIL_TEST_MODE_RECIPIENT || '').trim();
+        const copyMode = process.env.MAIL_COPY_TEST_RECIPIENT === 'true';
         let actualRecipient = to;
         let isTestMode = false;
+        let isCopyMode = false;
         
-        if (testModeRecipient && testModeRecipient.trim() !== '') {
-            actualRecipient = testModeRecipient;
-            isTestMode = true;
-            console.log(`[EmailService] TEST MODE: Redirecting email from ${to} to ${testModeRecipient}`);
+        if (testModeRecipient) {
+            if (copyMode) {
+                // COPY MODE: send to real recipient AND also send copy to test recipient
+                isCopyMode = true;
+                console.log(`[EmailService] COPY MODE: Sending to ${to} + copy to ${testModeRecipient}`);
+            } else {
+                // TEST MODE (classic): redirect only to test recipient
+                actualRecipient = testModeRecipient;
+                isTestMode = true;
+                console.log(`[EmailService] TEST MODE: Redirecting email from ${to} to ${testModeRecipient}`);
+            }
         }
 
         // Add [TEST] prefix to subject in test mode
@@ -235,6 +271,23 @@ class EmailService {
                 messageId: result.messageId
             });
 
+            // In copy mode, also send a copy to test mode recipient
+            if (isCopyMode && testModeRecipient && testModeRecipient !== actualRecipient) {
+                try {
+                    await this.transporter.sendMail({
+                        from: `"${process.env.MAIL_FROM_NAME || 'SENA HAPPY REFER'}" <${process.env.MAIL_FROM_ADDRESS || process.env.MAIL_USERNAME}>`,
+                        to: testModeRecipient,
+                        subject: subject + ` [COPY → ${to}]`,
+                        html,
+                        text,
+                        attachments
+                    });
+                    console.log(`[EmailService] COPY sent to ${testModeRecipient}`);
+                } catch (copyErr) {
+                    console.error(`[EmailService] Failed to send copy to ${testModeRecipient}:`, copyErr.message);
+                }
+            }
+
             return {
                 success: true,
                 messageId: result.messageId,
@@ -242,6 +295,8 @@ class EmailService {
                 to: actualRecipient,
                 originalRecipient: to,
                 isTestMode,
+                isCopyMode,
+                copyTo: isCopyMode ? testModeRecipient : undefined,
                 subject
             };
 
@@ -443,15 +498,20 @@ class EmailService {
      * @returns {Object} Test mode configuration
      */
     getTestModeStatus() {
-        const testModeRecipient = process.env.MAIL_TEST_MODE_RECIPIENT;
-        const isTestMode = !!(testModeRecipient && testModeRecipient.trim() !== '');
+        const testModeRecipient = (process.env.MAIL_TEST_MODE_RECIPIENT || '').trim();
+        const copyMode = process.env.MAIL_COPY_TEST_RECIPIENT === 'true';
+        const isTestMode = !!(testModeRecipient && !copyMode);
+        const isCopyMode = !!(testModeRecipient && copyMode);
         
         return {
             isTestMode,
-            testRecipient: isTestMode ? testModeRecipient : null,
-            message: isTestMode 
-                ? `TEST MODE: All emails will be sent to ${testModeRecipient}` 
-                : 'PRODUCTION MODE: Emails will be sent to actual recipients'
+            isCopyMode,
+            testRecipient: testModeRecipient || null,
+            message: isCopyMode
+                ? `COPY MODE: Emails sent to real recipients + copy to ${testModeRecipient}`
+                : isTestMode 
+                    ? `TEST MODE: All emails will be sent to ${testModeRecipient}` 
+                    : 'PRODUCTION MODE: Emails will be sent to actual recipients'
         };
     }
 }

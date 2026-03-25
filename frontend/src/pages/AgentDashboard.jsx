@@ -32,11 +32,12 @@ import {
   TeamOutlined,
   EditOutlined,
   SaveOutlined,
-  UserAddOutlined
+  UserAddOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { logoutUser, updateUser, getCurrentUser } from '../store/authSlice';
-import { fetchCustomers } from '../store/customersSlice';
+import { fetchCustomers, setFilters, setPagination } from '../store/customersSlice';
 import { useNavigate } from 'react-router-dom';
 import { agentsAPI, projectsAPI, customersAPI, productTypesAPI } from '../services/api';
 
@@ -47,7 +48,12 @@ const AgentDashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
-  const { customers, loading: customersLoading } = useSelector((state) => state.customers);
+  const {
+    customers,
+    loading: customersLoading,
+    pagination,
+    filters
+  } = useSelector((state) => state.customers);
   const [collapsed, setCollapsed] = useState(false);
   const [selectedMenu, setSelectedMenu] = useState('dashboard');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -60,6 +66,18 @@ const AgentDashboard = () => {
   const [productTypesLoading, setProductTypesLoading] = useState(false);
   const [isAddCustomerModalVisible, setIsAddCustomerModalVisible] = useState(false);
 
+  const loadAgentCustomers = ({ page = 1, limit = 10, search = '' } = {}) => {
+    if (!user?.agentId) return;
+
+    dispatch(fetchCustomers({
+      agentId: user.agentId,
+      status: 'all',
+      search,
+      page,
+      limit
+    }));
+  };
+
   // Refresh user profile on mount to get latest name/info
   useEffect(() => {
     dispatch(getCurrentUser());
@@ -68,14 +86,43 @@ const AgentDashboard = () => {
   // Load agent's customers on component mount
   useEffect(() => {
     if (user?.agentId) {
-      dispatch(fetchCustomers({
-        agentId: user.agentId,
-        status: 'all',
-        page: 1,
-        limit: 100
-      }));
+      loadAgentCustomers({
+        page: pagination.current || 1,
+        limit: pagination.pageSize || 10,
+        search: filters.search || ''
+      });
     }
   }, [dispatch, user?.agentId]);
+
+  const handleCustomerSearch = (value) => {
+    const searchValue = (value || '').trim();
+    const pageSize = pagination.pageSize || 10;
+
+    dispatch(setFilters({ search: searchValue }));
+    dispatch(setPagination({ current: 1 }));
+
+    loadAgentCustomers({
+      page: 1,
+      limit: pageSize,
+      search: searchValue
+    });
+  };
+
+  const handleCustomerTableChange = (tablePagination) => {
+    const nextPage = tablePagination.current || 1;
+    const nextPageSize = tablePagination.pageSize || 10;
+
+    dispatch(setPagination({
+      current: nextPage,
+      pageSize: nextPageSize
+    }));
+
+    loadAgentCustomers({
+      page: nextPage,
+      limit: nextPageSize,
+      search: filters.search || ''
+    });
+  };
 
   useEffect(() => {
     if (isEditingProfile) {
@@ -211,11 +258,13 @@ const AgentDashboard = () => {
         });
         addCustomerForm.resetFields();
         // Refresh customer list
+        dispatch(setPagination({ current: 1 }));
         dispatch(fetchCustomers({
           agentId: user.agentId,
           status: 'all',
+          search: filters.search || '',
           page: 1,
-          limit: 100
+          limit: pagination.pageSize || 10
         }));
         setIsAddCustomerModalVisible(false);
         setSelectedMenu('customers');
@@ -486,17 +535,33 @@ const AgentDashboard = () => {
               </Button>
             }
           >
+            <Input.Search
+              placeholder="ค้นหาชื่อ, อีเมล, เบอร์โทร..."
+              allowClear
+              enterButton={<SearchOutlined />}
+              defaultValue={filters.search}
+              onSearch={handleCustomerSearch}
+              onChange={(e) => {
+                if (e.target.value === '') {
+                  handleCustomerSearch('');
+                }
+              }}
+              style={{ maxWidth: 420, marginBottom: 16 }}
+            />
             <Table
               dataSource={myCustomers}
               columns={customerColumns}
               loading={customersLoading}
               pagination={{
-                pageSize: 10,
+                current: pagination.current,
+                pageSize: pagination.pageSize,
+                total: pagination.total,
                 showSizeChanger: true,
                 showQuickJumper: true,
                 showTotal: (total, range) =>
                   `${range[0]}-${range[1]} จาก ${total} รายการ`,
               }}
+              onChange={handleCustomerTableChange}
               locale={{
                 emptyText: 'ยังไม่มีลูกค้าที่รับผิดชอบ'
               }}
