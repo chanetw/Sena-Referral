@@ -1,3 +1,9 @@
+# =============================================================
+#  docker-compose.prod.yml
+#  ใช้บน Production Server (172.22.22.11)
+#  Pull images จาก Docker Hub โดยตรง — ไม่ต้อง build
+# =============================================================
+
 services:
   # MySQL Database
   mysql:
@@ -16,6 +22,7 @@ services:
       - ./database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./customer-audit-triggers.sql:/docker-entrypoint-initdb.d/02-triggers.sql
       - ./init-database.sql:/docker-entrypoint-initdb.d/03-sample-data.sql
+      - ./backups/sena_referral_current.sql:/docker-entrypoint-initdb.d/04-current-data.sql
     networks:
       - sena_network
     healthcheck:
@@ -23,11 +30,8 @@ services:
       timeout: 20s
       retries: 10
 
-  # Backend API
+  # Backend API — pull จาก Docker Hub
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     image: chanetw/sena-api:latest
     container_name: sena_api
     restart: unless-stopped
@@ -41,11 +45,8 @@ services:
     networks:
       - sena_network
 
-  # Frontend Web App
+  # Frontend Web App — pull จาก Docker Hub
   web:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
     image: chanetw/sena-web:latest
     container_name: sena_web
     restart: unless-stopped
@@ -54,11 +55,11 @@ services:
     depends_on:
       - api
     ports:
-      - "3000:5173"
+      - "3000:4173"
     networks:
       - sena_network
 
-  # phpMyAdmin - Database Management Tool
+  # phpMyAdmin — Database Management
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: sena_phpmyadmin
@@ -66,9 +67,6 @@ services:
     environment:
       PMA_HOST: mysql
       PMA_PORT: 3306
-      PMA_USER: sena_user
-      PMA_PASSWORD: sena_password
-      MYSQL_ROOT_PASSWORD: rootpassword
       UPLOAD_LIMIT: 100M
     ports:
       - "8080:80"
@@ -80,7 +78,6 @@ services:
 
 volumes:
   mysql_data:
-    driver: local
 
 networks:
   sena_network:
