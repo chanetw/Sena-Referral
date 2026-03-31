@@ -234,6 +234,28 @@ const normalizeRecipientEmails = (recipientEmails) => {
       ...getProjectPassRecipientList(project)
     ]);
   };
+// ─── Agent Referral Code helpers ────────────────────────────────────────────
+const REF_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no O,I,L,0,1
+const REF_CODE_LENGTH = 6;
+
+const generateRefCode = () => {
+  let code = '';
+  for (let i = 0; i < REF_CODE_LENGTH; i++) {
+    code += REF_CODE_CHARSET[Math.floor(Math.random() * REF_CODE_CHARSET.length)];
+  }
+  return code;
+};
+
+const generateUniqueRefCode = async (AgentModel) => {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = generateRefCode();
+    const existing = await AgentModel.findOne({ where: { refCode: code } });
+    if (!existing) return code;
+  }
+  throw new Error('Failed to generate unique referral code after 10 attempts');
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const formatNotificationRule = (ruleRow) => ({
   id: ruleRow.id,
   actionType: ruleRow.actionType,
@@ -1000,6 +1022,7 @@ app.get('/api/auth/me', checkAuth, async (req, res) => {
           ...userData,
           agentId: agent.id,
           agentCode: agent.agentCode,
+          refCode: agent.refCode,
           firstName: agent.firstName,
           lastName: agent.lastName,
           phone: agent.phone,
@@ -1152,10 +1175,12 @@ app.post('/api/auth/register-agent', async (req, res) => {
     });
 
     // Create agent
+    const newRefCode = await generateUniqueRefCode(Agent);
     const newAgent = await Agent.create({
       userId: newUser.id,
       agentTypeId: agentType.id,
       agentCode: newAgentCode,
+      refCode: newRefCode,
       agentIdCard: idCard,
       email,
       firstName,
@@ -1829,6 +1854,57 @@ app.get('/api/agents/next-code', async (req, res) => {
   }
 });
 
+// GET /api/agents/by-ref-code/:code - Lookup agent by referral code (public)
+app.get('/api/agents/by-ref-code/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    if (!code || !/^[A-Z0-9]{6}$/i.test(code)) {
+      return res.status(400).json({ success: false, message: 'รหัสแนะนำไม่ถูกต้อง' });
+    }
+    const agent = await Agent.findOne({
+      where: { refCode: code.toUpperCase() },
+      attributes: ['id', 'agentCode', 'refCode', 'firstName', 'lastName', 'status']
+    });
+    if (!agent) {
+      return res.status(404).json({ success: false, message: 'ไม่พบรหัสแนะนำนี้ในระบบ' });
+    }
+    res.json({
+      success: true,
+      data: {
+        agentId: agent.id,
+        agentCode: agent.agentCode,
+        refCode: agent.refCode,
+        name: `${agent.firstName} ${agent.lastName}`,
+        status: agent.status
+      }
+    });
+  } catch (error) {
+    console.error('Get agent by ref code error:', error);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการค้นหาข้อมูล' });
+  }
+});
+
+// POST /api/agents/backfill-ref-codes - Assign refCode to agents that don't have one (admin)
+app.post('/api/agents/backfill-ref-codes', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'เฉพาะผู้ดูแลระบบ' });
+    }
+    const { Op } = require('sequelize');
+    const agentsWithoutCode = await Agent.findAll({ where: { refCode: { [Op.is]: null } } });
+    let updated = 0;
+    for (const ag of agentsWithoutCode) {
+      const code = await generateUniqueRefCode(Agent);
+      await ag.update({ refCode: code });
+      updated++;
+    }
+    res.json({ success: true, message: `อัพเดทรหัสแนะนำสำเร็จ ${updated} เอเจนต์`, updated });
+  } catch (error) {
+    console.error('Backfill ref codes error:', error);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
+  }
+});
+
 // GET /api/agents/:id - Get agent by ID
 app.get('/api/agents/:id', checkAuth, async (req, res) => {
   try {
@@ -1994,10 +2070,12 @@ app.post('/api/agents', checkAuth, async (req, res) => {
     });
 
     // Create agent
+    const agentRefCode = await generateUniqueRefCode(Agent);
     const agent = await Agent.create({
       userId: user.id,
       agentTypeId: agentType.id,
       agentCode,
+      refCode: agentRefCode,
       agentIdCard: idCard,
       email,
       idCard,
@@ -2168,8 +2246,10 @@ app.put('/api/agents/:id', checkAuth, async (req, res) => {
       }
     }
 
-    // Update agent
+    // Update agent (assign refCode only if not yet set)
+    const assignRefCode = !agent.refCode ? { refCode: await generateUniqueRefCode(Agent) } : {};
     await agent.update({
+      ...assignRefCode,
       ...(agentCode && { agentCode }),
       ...(firstName && { firstName }),
       ...(lastName && { lastName }),

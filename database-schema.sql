@@ -36,6 +36,7 @@ CREATE TABLE agents (
     user_id INT,
     agent_type_id INT NOT NULL,
     agent_code VARCHAR(20) UNIQUE NOT NULL,
+    ref_code VARCHAR(10) UNIQUE NULL,
     agent_id_card VARCHAR(13),
     id_card VARCHAR(13) UNIQUE NOT NULL,
     first_name VARCHAR(50) NOT NULL,

@@ -18,7 +18,8 @@ import {
   Input,
   Select,
   notification,
-  Modal
+  Modal,
+  Tooltip
 } from 'antd';
 import {
   MenuFoldOutlined,
@@ -33,7 +34,8 @@ import {
   EditOutlined,
   SaveOutlined,
   UserAddOutlined,
-  SearchOutlined
+  SearchOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
 import { logoutUser, updateUser, getCurrentUser } from '../store/authSlice';
@@ -646,6 +648,29 @@ const AgentDashboard = () => {
                           <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
                             <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>รหัสเอเจนต์</div>
                             <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.agentCode || '-'}</div>
+                          </Card>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                          <Card size="small" style={{ borderRadius: '12px', background: '#e6f4ff', border: '1px solid #91caff' }} styles={{ body: { padding: '16px' } }}>
+                            <div style={{ fontSize: '12px', color: '#1677ff', marginBottom: '8px', fontWeight: 500 }}>รหัสแนะนำ (Referral Code)</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '22px', fontWeight: 700, color: '#0958d9', fontFamily: 'monospace', letterSpacing: '2px' }}>{user?.refCode || '-'}</span>
+                              {user?.refCode && (
+                                <Tooltip title="คัดลอกรหัสแนะนำ">
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<CopyOutlined />}
+                                    style={{ color: '#1677ff' }}
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(user.refCode);
+                                      notification.success({ message: 'คัดลอกรหัสแนะนำแล้ว', duration: 1.5 });
+                                    }}
+                                  />
+                                </Tooltip>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#595959', marginTop: '6px' }}>แชร์รหัสนี้ให้ลูกบ้านใช้ลงทะเบียน</div>
                           </Card>
                         </Col>
                         <Col xs={24} sm={12}>

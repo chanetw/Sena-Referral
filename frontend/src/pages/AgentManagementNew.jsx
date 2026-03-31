@@ -32,7 +32,8 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   CheckOutlined,
-  CloseOutlined
+  CloseOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import {
   fetchAgents,
@@ -285,6 +286,36 @@ const AgentManagementNew = () => {
           {text || `#${record.id}`}
         </span>
       )
+    },
+    {
+      title: 'รหัสแนะนำ',
+      dataIndex: 'refCode',
+      key: 'refCode',
+      width: 130,
+      render: (text) => text ? (
+        <Space size={4}>
+          <span style={{
+            fontFamily: 'monospace',
+            fontWeight: 600,
+            fontSize: '13px',
+            color: '#1677ff',
+            background: '#e6f4ff',
+            border: '1px solid #91caff',
+            borderRadius: '6px',
+            padding: '3px 8px',
+            letterSpacing: '1px'
+          }}>{text}</span>
+          <Tooltip title="คัดลอก">
+            <CopyOutlined
+              style={{ color: '#8c8c8c', cursor: 'pointer', fontSize: '12px' }}
+              onClick={() => {
+                navigator.clipboard.writeText(text);
+                notification.success({ message: 'คัดลอกรหัสแนะนำแล้ว', duration: 1.5 });
+              }}
+            />
+          </Tooltip>
+        </Space>
+      ) : <span style={{ color: '#bfbfbf' }}>-</span>
     },
     {
       title: 'ชื่อ-นามสกุล',

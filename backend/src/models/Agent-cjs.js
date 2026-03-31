@@ -31,6 +31,12 @@ const Agent = sequelize.define('Agent', {
     unique: true,
     field: 'agent_code'
   },
+  refCode: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    unique: true,
+    field: 'ref_code'
+  },
   agentIdCard: {
     type: DataTypes.STRING(13),
     allowNull: true,
