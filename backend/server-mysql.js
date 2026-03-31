@@ -205,6 +205,35 @@ const normalizeRecipientEmails = (recipientEmails) => {
   )];
 };
 
+  const normalizeProjectPassEmailRecipients = (recipientEmails) => {
+    return normalizeRecipientEmails(recipientEmails);
+  };
+
+  const buildProjectPassEmailSettings = ({ passEmailEnabled, passEmailRecipients }) => {
+    const recipients = normalizeProjectPassEmailRecipients(passEmailRecipients);
+    const enabled = Boolean(passEmailEnabled);
+
+    return {
+      passEmailEnabled: enabled,
+      passEmailRecipients: recipients.join(',') || null,
+      recipientList: recipients
+    };
+  };
+
+  const getProjectPassRecipientList = (project) => {
+    if (!project || !project.passEmailEnabled) {
+      return [];
+    }
+
+    return normalizeProjectPassEmailRecipients(project.passEmailRecipients);
+  };
+
+  const buildApprovedRecipientList = ({ agentEmail, project }) => {
+    return normalizeRecipientEmails([
+      agentEmail,
+      ...getProjectPassRecipientList(project)
+    ]);
+  };
 const formatNotificationRule = (ruleRow) => ({
   id: ruleRow.id,
   actionType: ruleRow.actionType,
@@ -354,6 +383,43 @@ const sendNotificationToRecipients = async (actionType, recipients = [], payload
   };
 };
 
+  const sendReferralResultToRecipients = async ({ recipients, agentName, customerName, status, reason, isSelfReferral }) => {
+    const normalizedRecipients = normalizeRecipientEmails(recipients);
+    if (!normalizedRecipients.length) {
+      return {
+        attempted: 0,
+        sent: 0,
+        failed: 0,
+        results: []
+      };
+    }
+
+    const settled = await Promise.allSettled(
+      normalizedRecipients.map((to) => emailService.sendReferralResult({
+        to,
+        agentName,
+        customerName,
+        status,
+        reason,
+        isSelfReferral
+      }))
+    );
+
+    const results = settled.map((entry, index) => (
+      entry.status === 'fulfilled'
+        ? { to: normalizedRecipients[index], success: true, data: entry.value }
+        : { to: normalizedRecipients[index], success: false, error: entry.reason?.message || 'ส่งอีเมลไม่สำเร็จ' }
+    ));
+
+    const sent = results.filter((result) => result.success).length;
+
+    return {
+      attempted: normalizedRecipients.length,
+      sent,
+      failed: normalizedRecipients.length - sent,
+      results
+    };
+  };
 const app = express();
 
 // Security middleware
@@ -715,75 +781,74 @@ const getNextAgentCode = async (transaction) => {
   return `AG${nextNumber.toString().padStart(3, '0')}`;
 };
 
-const generatePendingDuplicateIdCard = async (originalIdCard, transaction) => {
-  let candidateIdCard = '';
-  let isUnique = false;
+const buildExistingAgentData = (agent) => ({
+  agentCode: agent?.agentCode || null,
+  firstName: agent?.firstName || null,
+  lastName: agent?.lastName || null,
+  idCard: agent?.agentIdCard || agent?.idCard || null,
+  email: agent?.email || null,
+  phone: agent?.phone || null,
+  status: agent?.status || null
+});
 
-  while (!isUnique) {
-    const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    candidateIdCard = `${originalIdCard.slice(0, 9)}${randomSuffix}`;
+const buildExistingCustomerData = (customer) => ({
+  customerCode: customer?.customerCode || null,
+  firstName: customer?.firstName || null,
+  lastName: customer?.lastName || null,
+  idCard: customer?.idCard || null,
+  email: customer?.email || null,
+  phone: customer?.phone || null,
+  status: customer?.status || null
+});
 
-    const existedAgent = await Agent.findOne({
-      where: { idCard: candidateIdCard },
-      attributes: ['id'],
+const detectCustomerDuplicateReasons = async ({ idCard, firstName, lastName, transaction }) => {
+  const reasons = [];
+
+  if (idCard) {
+    const existingIdCard = await Customer.findOne({
+      where: { idCard },
+      order: [['id', 'DESC']],
       transaction
     });
 
-    isUnique = !existedAgent;
-  }
-
-  return candidateIdCard;
-};
-
-const notifyAdminsForDuplicateAgentRegistration = async ({ req, newAgent, matchedAgent, idCard, email }) => {
-  try {
-    const adminUsers = await User.findAll({
-      where: {
-        role: 'admin',
-        isActive: true
-      },
-      attributes: ['id']
-    });
-
-    if (!adminUsers.length) {
-      return;
+    if (existingIdCard) {
+      reasons.push({
+        type: 'idCard',
+        message: 'เลขบัตรประชาชนซ้ำกับข้อมูลลูกค้าที่มีอยู่ในระบบ',
+        existingData: buildExistingCustomerData(existingIdCard)
+      });
     }
+  }
 
-    const rawIp = req.headers['x-forwarded-for'] || req.ip || null;
-    const ipAddress = rawIp ? String(rawIp).split(',')[0].trim() : null;
-    const userAgent = req.get('user-agent') || null;
-    const notificationPayload = JSON.stringify({
-      type: 'agent_duplicate_idcard_pending',
-      message: 'มีการสมัครเอเจนต์ด้วยเลขบัตรประชาชนซ้ำ รอการตรวจสอบจากผู้ดูแลระบบ',
-      pendingAgentId: newAgent.id,
-      pendingAgentCode: newAgent.agentCode,
-      submittedIdCard: idCard,
-      submittedEmail: email,
-      matchedAgentId: matchedAgent?.id || null,
-      matchedAgentCode: matchedAgent?.agentCode || null
+  if (firstName && lastName) {
+    const existingFullName = await Customer.findOne({
+      where: { firstName, lastName },
+      order: [['id', 'DESC']],
+      transaction
     });
 
-    await Promise.all(adminUsers.map((admin) => sequelize.query(
-      `INSERT INTO activity_logs
-        (user_id, action, table_name, record_id, old_values, new_values, ip_address, user_agent, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      {
-        replacements: [
-          admin.id,
-          'agent_duplicate_idcard_pending',
-          'agents',
-          newAgent.id,
-          null,
-          notificationPayload,
-          ipAddress,
-          userAgent
-        ]
-      }
-    )));
-  } catch (error) {
-    console.error('[Admin Noti] Failed to create duplicate-agent notification:', error.message);
+    if (existingFullName) {
+      reasons.push({
+        type: 'fullName',
+        message: 'ชื่อ-นามสกุลซ้ำกับข้อมูลลูกค้าที่มีอยู่ในระบบ',
+        existingData: buildExistingCustomerData(existingFullName)
+      });
+    }
   }
+
+  return reasons;
 };
+
+const findExistingAgentByIdCard = async (idCard, transaction) => Agent.findOne({
+  where: {
+    [require('sequelize').Op.or]: [
+      { idCard },
+      { agentIdCard: idCard }
+    ]
+  },
+  attributes: ['id', 'agentCode', 'idCard', 'agentIdCard', 'firstName', 'lastName', 'email', 'phone', 'status'],
+  transaction
+});
 
 // Auth middleware
 const checkAuth = async (req, res, next) => {
@@ -996,36 +1061,60 @@ app.post('/api/auth/register-agent', async (req, res) => {
       });
     }
 
+    if (!isValidIdCard(idCard)) {
+      return res.status(400).json({
+        success: false,
+        message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
+        errorType: 'idCard'
+      });
+    }
+
+    if (!isValidEmail(email.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบอีเมลไม่ถูกต้อง',
+        errorType: 'email'
+      });
+    }
+
+    if (phone && !isValidThaiPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง (ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก)',
+        errorType: 'phone'
+      });
+    }
+
     // Set password as ID card number
     const password = idCard;
+
+    // idCard is the primary identity key: block before creating user/agent
+    const existingAgent = await findExistingAgentByIdCard(idCard);
+    if (existingAgent) {
+      return res.status(409).json({
+        success: false,
+        message: 'เลขประจำตัวประชาชนนี้ถูกใช้แล้ว',
+        errorType: 'idCard',
+        existingData: buildExistingAgentData(existingAgent),
+        nextAction: 'contact_admin'
+      });
+    }
 
     // Check if email already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
         message: 'อีเมลนี้ถูกใช้แล้ว',
         errorType: 'email'
       });
     }
 
-    // Check if ID card already exists
-    const existingAgent = await Agent.findOne({
-      where: {
-        [require('sequelize').Op.or]: [
-          { idCard },
-          { agentIdCard: idCard }
-        ]
-      },
-      attributes: ['id', 'agentCode', 'idCard', 'agentIdCard']
-    });
-    const isDuplicateIdCard = Boolean(existingAgent);
-
     // Check for duplicate phone (if provided)
     if (phone) {
       const existingPhone = await Agent.findOne({ where: { phone } });
       if (existingPhone) {
-        return res.status(400).json({
+        return res.status(409).json({
           success: false,
           message: 'เบอร์โทรนี้ถูกใช้แล้ว',
           errorType: 'phone'
@@ -1062,11 +1151,6 @@ app.post('/api/auth/register-agent', async (req, res) => {
       role: 'agent'
     });
 
-    const finalAgentStatus = isDuplicateIdCard ? 'inactive' : 'active';
-    const storedIdCard = isDuplicateIdCard
-      ? await generatePendingDuplicateIdCard(idCard)
-      : idCard;
-
     // Create agent
     const newAgent = await Agent.create({
       userId: newUser.id,
@@ -1077,10 +1161,9 @@ app.post('/api/auth/register-agent', async (req, res) => {
       firstName,
       lastName,
       phone: phone || '',
-      idCard: storedIdCard,
+      idCard,
       registrationDate: new Date().toISOString().split('T')[0],
-      status: finalAgentStatus,
-      duplicateLeadId: isDuplicateIdCard ? (existingAgent.agentCode || String(existingAgent.id)) : null
+      status: 'active'
     });
 
     // Create agent type detail row
@@ -1096,37 +1179,25 @@ app.post('/api/auth/register-agent', async (req, res) => {
       knowSenaFrom: knowSenaFrom || null
     });
 
-    if (isDuplicateIdCard) {
-      await notifyAdminsForDuplicateAgentRegistration({
-        req,
-        newAgent,
-        matchedAgent: existingAgent,
-        idCard,
-        email
-      });
-    }
-
     await sendActionNotification('agent_registered', {
       agentCode: newAgent.agentCode,
       agentName: `${newAgent.firstName} ${newAgent.lastName}`,
       email: newAgent.email,
       status: newAgent.status,
-      requiresAdminReview: isDuplicateIdCard,
+      requiresAdminReview: false,
       generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
     res.status(201).json({
       success: true,
-      message: isDuplicateIdCard
-        ? 'ลงทะเบียนสำเร็จ แต่พบเลขบัตรประชาชนซ้ำ สถานะรอตรวจสอบจากผู้ดูแลระบบ'
-        : 'ลงทะเบียนสำเร็จ เปิดใช้งานบัญชีแล้ว',
+      message: 'ลงทะเบียนสำเร็จ เปิดใช้งานบัญชีแล้ว',
       data: {
         agentCode: newAgent.agentCode,
         firstName: newAgent.firstName,
         lastName: newAgent.lastName,
         email: newUser.email,
         status: newAgent.status,
-        requiresAdminReview: isDuplicateIdCard,
+        requiresAdminReview: false,
         agentType: formatAgentType(agentType)
       }
     });
@@ -1260,6 +1331,18 @@ app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (r
     // Set password as ID card number
     const password = idCard;
 
+    // idCard is the primary identity key: block before creating user/agent
+    const existingAgent = await findExistingAgentByIdCard(idCard);
+    if (existingAgent) {
+      return res.status(409).json({
+        success: false,
+        message: 'เลขประจำตัวประชาชนนี้ถูกใช้แล้ว',
+        errorType: 'idCard',
+        existingData: buildExistingAgentData(existingAgent),
+        nextAction: 'contact_admin'
+      });
+    }
+
     // Check if email already exists
     const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
     if (existingUser) {
@@ -1269,18 +1352,6 @@ app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (r
         errorType: 'email'
       });
     }
-
-    // Check if ID card already exists
-    const existingAgent = await Agent.findOne({
-      where: {
-        [require('sequelize').Op.or]: [
-          { idCard },
-          { agentIdCard: idCard }
-        ]
-      },
-      attributes: ['id', 'agentCode', 'idCard', 'agentIdCard']
-    });
-    const isDuplicateIdCard = Boolean(existingAgent);
 
     // Check for duplicate phone (if provided)
     if (phone) {
@@ -1324,11 +1395,6 @@ app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (r
       isActive: true  // Mark as active immediately
     });
 
-    const finalAgentStatus = isDuplicateIdCard ? 'inactive' : 'active';
-    const storedIdCard = isDuplicateIdCard
-      ? await generatePendingDuplicateIdCard(idCard)
-      : idCard;
-
     // Create agent
     const newAgent = await Agent.create({
       userId: newUser.id,
@@ -1339,43 +1405,29 @@ app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (r
       firstName,
       lastName,
       phone: phone || '',
-      idCard: storedIdCard,
+      idCard,
       registrationDate: new Date().toISOString().split('T')[0],
-      status: finalAgentStatus,  // active or inactive if duplicate
-      duplicateLeadId: isDuplicateIdCard ? (existingAgent.agentCode || String(existingAgent.id)) : null
+      status: 'active'
     });
-
-    if (isDuplicateIdCard) {
-      await notifyAdminsForDuplicateAgentRegistration({
-        req,
-        newAgent,
-        matchedAgent: existingAgent,
-        idCard,
-        email: email.toLowerCase()
-      });
-    }
 
     await sendActionNotification('agent_registered', {
       agentCode: newAgent.agentCode,
       agentName: `${newAgent.firstName} ${newAgent.lastName}`,
       email: newAgent.email,
       status: newAgent.status,
-      requiresAdminReview: isDuplicateIdCard,
+      requiresAdminReview: false,
       generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
     console.log('Register and activate success:', {
       agentCode: newAgent.agentCode,
       email: email.toLowerCase(),
-      status: newAgent.status,
-      isDuplicate: isDuplicateIdCard
+      status: newAgent.status
     });
 
     res.status(201).json({
       success: true,
-      message: isDuplicateIdCard
-        ? 'ลงทะเบียนและเปิดใช้งานบัญชีสำเร็จ แต่พบเลขบัตรประชาชนซ้ำ สถานะรอตรวจสอบจากผู้ดูแลระบบ'
-        : 'ลงทะเบียนและเปิดใช้งานบัญชีสำเร็จ',
+      message: 'ลงทะเบียนและเปิดใช้งานบัญชีสำเร็จ',
       data: {
         agentCode: newAgent.agentCode,
         firstName: newAgent.firstName,
@@ -1383,7 +1435,7 @@ app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (r
         email: newUser.email,
         userStatus: newUser.isActive ? 'active' : 'inactive',
         agentStatus: newAgent.status,
-        requiresAdminReview: isDuplicateIdCard,
+        requiresAdminReview: false,
         agentType: formatAgentType(agentType),
         loginInfo: {
           email: newUser.email,
@@ -1485,6 +1537,17 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
   }
 
   try {
+    const existingAgentByIdCard = await findExistingAgentByIdCard(requestPayload.idCard);
+    if (existingAgentByIdCard) {
+      return res.status(409).json({
+        success: false,
+        message: 'เลขประจำตัวประชาชนนี้ถูกใช้แล้ว',
+        errorType: 'idCard',
+        existingData: buildExistingAgentData(existingAgentByIdCard),
+        nextAction: 'contact_admin'
+      });
+    }
+
     const existingUser = await User.findOne({ where: { email: requestPayload.email } });
     if (existingUser) {
       return res.status(409).json({
@@ -1493,17 +1556,6 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
         errorType: 'email'
       });
     }
-
-    const existingAgentByIdCard = await Agent.findOne({
-      where: {
-        [require('sequelize').Op.or]: [
-          { idCard: requestPayload.idCard },
-          { agentIdCard: requestPayload.idCard }
-        ]
-      },
-      attributes: ['id', 'agentCode', 'idCard', 'agentIdCard']
-    });
-    const isDuplicateIdCard = Boolean(existingAgentByIdCard);
 
     if (requestPayload.phone) {
       const existingAgentByPhone = await Agent.findOne({ where: { phone: requestPayload.phone } });
@@ -1534,9 +1586,6 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
       }, { transaction });
 
       const agentCode = await getNextAgentCode(transaction);
-      const storedIdCard = isDuplicateIdCard
-        ? await generatePendingDuplicateIdCard(requestPayload.idCard, transaction)
-        : requestPayload.idCard;
 
       return Agent.create({
         userId: user.id,
@@ -1544,32 +1593,21 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
         agentCode,
         agentIdCard: requestPayload.idCard,
         email: requestPayload.email,
-        idCard: storedIdCard,
+        idCard: requestPayload.idCard,
         firstName: requestPayload.firstName,
         lastName: requestPayload.lastName,
         phone: requestPayload.phone || '',
         registrationDate: new Date().toISOString().split('T')[0],
-        status: isDuplicateIdCard ? 'inactive' : 'active',
-        duplicateLeadId: isDuplicateIdCard ? (existingAgentByIdCard.agentCode || String(existingAgentByIdCard.id)) : null
+        status: 'active'
       }, { transaction });
     });
-
-    if (isDuplicateIdCard) {
-      await notifyAdminsForDuplicateAgentRegistration({
-        req,
-        newAgent: createdAgent,
-        matchedAgent: existingAgentByIdCard,
-        idCard: requestPayload.idCard,
-        email: requestPayload.email
-      });
-    }
 
     await sendActionNotification('agent_registered', {
       agentCode: createdAgent.agentCode,
       agentName: `${createdAgent.firstName} ${createdAgent.lastName}`,
       email: createdAgent.email,
       status: createdAgent.status,
-      requiresAdminReview: isDuplicateIdCard,
+      requiresAdminReview: false,
       generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
@@ -1582,14 +1620,12 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
 
     return res.status(201).json({
       success: true,
-      message: isDuplicateIdCard
-        ? 'ลงทะเบียนสำเร็จ แต่พบเลขบัตรประชาชนซ้ำ สถานะรอตรวจสอบจากผู้ดูแลระบบ'
-        : 'เปิดใช้งานบัญชีสำเร็จ',
+      message: 'เปิดใช้งานบัญชีสำเร็จ',
       data: {
         agentCode: createdAgent.agentCode,
         email: requestPayload.email,
         status: createdAgent.status,
-        requiresAdminReview: isDuplicateIdCard,
+        requiresAdminReview: false,
         agentType: formatAgentType(agentType)
       }
     });
@@ -1858,24 +1894,60 @@ app.post('/api/agents', checkAuth, async (req, res) => {
       companyName, occupation, knowSenaFrom
     } = req.body;
 
+    if (!email || !firstName || !lastName || !idCard) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณากรอกข้อมูลให้ครบถ้วน (ชื่อ, นามสกุล, อีเมล, เลขบัตรประชาชน)',
+        errorType: 'validation'
+      });
+    }
+
+    if (!isValidEmail(email.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบอีเมลไม่ถูกต้อง',
+        errorType: 'email'
+      });
+    }
+
+    if (!isValidIdCard(idCard)) {
+      return res.status(400).json({
+        success: false,
+        message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
+        errorType: 'idCard'
+      });
+    }
+
+    if (phone && !isValidThaiPhone(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง (ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก)',
+        errorType: 'phone'
+      });
+    }
+
     // Set password as ID card number if not provided
     const password = idCard;
+
+    // idCard is the primary identity key: block before creating user/agent
+    const existingAgent = await findExistingAgentByIdCard(idCard);
+    if (existingAgent) {
+      return res.status(409).json({
+        success: false,
+        message: 'เลขบัตรประชาชนนี้ถูกใช้แล้ว',
+        errorType: 'idCard',
+        existingData: buildExistingAgentData(existingAgent),
+        nextAction: 'contact_admin'
+      });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: 'อีเมลนี้ถูกใช้แล้ว'
-      });
-    }
-
-    // Check if ID card already exists
-    const existingAgent = await Agent.findOne({ where: { idCard } });
-    if (existingAgent) {
-      return res.status(400).json({
-        success: false,
-        message: 'เลขบัตรประชาชนนี้ถูกใช้แล้ว'
+        message: 'อีเมลนี้ถูกใช้แล้ว',
+        errorType: 'email'
       });
     }
 
@@ -1883,9 +1955,10 @@ app.post('/api/agents', checkAuth, async (req, res) => {
     if (phone) {
       const existingPhone = await Agent.findOne({ where: { phone } });
       if (existingPhone) {
-        return res.status(400).json({
+        return res.status(409).json({
           success: false,
-          message: 'เบอร์โทรศัพท์นี้ถูกใช้แล้ว'
+          message: 'เบอร์โทรศัพท์นี้ถูกใช้แล้ว',
+          errorType: 'phone'
         });
       }
     }
@@ -1925,6 +1998,7 @@ app.post('/api/agents', checkAuth, async (req, res) => {
       userId: user.id,
       agentTypeId: agentType.id,
       agentCode,
+      agentIdCard: idCard,
       email,
       idCard,
       firstName,
@@ -2758,7 +2832,47 @@ app.post('/api/customers', checkAuth, async (req, res) => {
       projectId, budgetMin, budgetMax,
       status = 'pending', source = 'referral', notes, referralType, productTypeIds
     } = req.body;
+
+    const normalizedFirstName = normalizeText(firstName);
+    const normalizedLastName = normalizeText(lastName);
+    const normalizedPhone = normalizeText(phone);
+    const normalizedEmail = normalizeText(email).toLowerCase();
+    const normalizedIdCard = normalizeText(idCard);
     const normalizedProductTypeIds = normalizeProductTypeIds(productTypeIds);
+    const allowedStatuses = ['pending', 'approved', 'duplicate'];
+    const requestedStatus = allowedStatuses.includes(status) ? status : 'pending';
+    const isAgentCreator = req.user.role === 'agent';
+
+    if (!normalizedFirstName || !normalizedLastName) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณากรอกชื่อและนามสกุลให้ครบถ้วน'
+      });
+    }
+
+    if (normalizedIdCard && !isValidIdCard(normalizedIdCard)) {
+      return res.status(400).json({
+        success: false,
+        message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
+        errorType: 'idCard'
+      });
+    }
+
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบอีเมลไม่ถูกต้อง',
+        errorType: 'email'
+      });
+    }
+
+    if (normalizedPhone && !isValidThaiPhone(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง',
+        errorType: 'phone'
+      });
+    }
 
     // Resolve agentId: agents always use their own record; admin can specify
     let agentId = req.body.agentId;
@@ -2788,64 +2902,65 @@ app.post('/api/customers', checkAuth, async (req, res) => {
       });
     }
 
-    // Check for duplicate customerCode
-    if (customerCode) {
-      const existingCustomerCode = await Customer.findOne({ where: { customerCode } });
-      if (existingCustomerCode) {
-        return res.status(400).json({
-          success: false,
-          message: 'รหัสลูกค้านี้มีอยู่ในระบบแล้ว'
-        });
+    // Admin flow keeps strict duplicate checks for core unique-like fields.
+    if (!isAgentCreator) {
+      if (customerCode) {
+        const existingCustomerCode = await Customer.findOne({ where: { customerCode } });
+        if (existingCustomerCode) {
+          return res.status(400).json({
+            success: false,
+            message: 'รหัสลูกค้านี้มีอยู่ในระบบแล้ว'
+          });
+        }
+      }
+
+      if (normalizedPhone) {
+        const existingPhone = await Customer.findOne({ where: { phone: normalizedPhone } });
+        if (existingPhone) {
+          return res.status(400).json({
+            success: false,
+            message: 'เบอร์โทรศัพท์นี้มีอยู่ในระบบแล้ว'
+          });
+        }
+      }
+
+      if (normalizedEmail) {
+        const existingEmail = await Customer.findOne({ where: { email: normalizedEmail } });
+        if (existingEmail) {
+          return res.status(400).json({
+            success: false,
+            message: 'อีเมลนี้มีอยู่ในระบบแล้ว'
+          });
+        }
       }
     }
 
-    // Check for duplicate phone
-    if (phone) {
-      const existingPhone = await Customer.findOne({ where: { phone } });
-      if (existingPhone) {
-        return res.status(400).json({
-          success: false,
-          message: 'เบอร์โทรศัพท์นี้มีอยู่ในระบบแล้ว'
-        });
-      }
-    }
+    const duplicateReasons = isAgentCreator
+      ? await detectCustomerDuplicateReasons({
+        idCard: normalizedIdCard,
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName
+      })
+      : [];
 
-    // Check for duplicate email
-    if (email) {
-      const existingEmail = await Customer.findOne({ where: { email } });
-      if (existingEmail) {
-        return res.status(400).json({
-          success: false,
-          message: 'อีเมลนี้มีอยู่ในระบบแล้ว'
-        });
-      }
-    }
-
-    // Check for duplicate ID card
-    if (idCard) {
-      const existingIdCard = await Customer.findOne({ where: { idCard } });
-      if (existingIdCard) {
-        return res.status(400).json({
-          success: false,
-          message: 'เลขบัตรประชาชนนี้มีอยู่ในระบบแล้ว'
-        });
-      }
-    }
+    const finalStatus = isAgentCreator
+      ? (duplicateReasons.length > 0 ? 'duplicate' : 'approved')
+      : requestedStatus;
 
     let customerId;
     await sequelize.transaction(async (transaction) => {
       const customer = await Customer.create({
         customerCode: customerCode || null,
-        firstName,
-        lastName,
-        phone: phone || null,
-        email: email || null,
-        idCard: idCard || null,
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName,
+        phone: normalizedPhone || null,
+        email: normalizedEmail || null,
+        idCard: normalizedIdCard || null,
         agentId,
         projectId: projectId || null,
         budgetMin: budgetMin !== undefined ? budgetMin : null,
         budgetMax: budgetMax !== undefined ? budgetMax : null,
-        status,
+        status: finalStatus,
         source,
         notes: notes || null,
         referralType: referralType || null,
@@ -2869,14 +2984,101 @@ app.post('/api/customers', checkAuth, async (req, res) => {
         ? `${customerWithRelations.agent.agentCode || ''} ${customerWithRelations.agent.firstName || ''} ${customerWithRelations.agent.lastName || ''}`.trim()
         : '-',
       projectName: customerWithRelations?.project?.projectName || '-',
-      status: customerWithRelations?.status || 'pending',
+      status: customerWithRelations?.status || finalStatus,
       generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
     });
 
+    let emailNotification = null;
+    if (customerWithRelations && ['approved', 'duplicate'].includes(finalStatus)) {
+      try {
+        const agent = customerWithRelations.agent;
+        const customerName = `${customerWithRelations.firstName} ${customerWithRelations.lastName}`;
+        const agentNameForNotification = customerWithRelations?.agent
+          ? `${customerWithRelations.agent.agentCode || ''} ${customerWithRelations.agent.firstName || ''} ${customerWithRelations.agent.lastName || ''}`.trim()
+          : '-';
+        const projectNameForNotification = customerWithRelations?.project?.projectName || '-';
+
+        const triggerStatusNotification = async (actionType, statusText) => {
+          await sendActionNotification(actionType, {
+            customerCode: customerWithRelations?.customerCode || null,
+            customerName,
+            agentName: agentNameForNotification,
+            projectName: projectNameForNotification,
+            status: statusText,
+            generatedAt: new Date().toLocaleString('th-TH', { hour12: false })
+          });
+        };
+
+        const isSelfReferral = customerWithRelations.referralType === 'self';
+        const agentName = agent ? `${agent.firstName} ${agent.lastName}` : '-';
+
+        if (finalStatus === 'approved') {
+          const recipients = buildApprovedRecipientList({
+            agentEmail: agent?.email,
+            project: customerWithRelations.project
+          });
+
+          if (recipients.length > 0) {
+            emailNotification = await sendReferralResultToRecipients({
+              recipients,
+              agentName,
+              customerName,
+              status: 'approved',
+              isSelfReferral
+            });
+            await triggerStatusNotification('customer_approved', 'ผ่าน');
+            console.log(`[Email] Approval notifications sent to ${recipients.join(', ')} for customer ${customerName}`);
+          } else {
+            console.warn(`[Email] Cannot send approval notification: no recipients found for customer ${customerWithRelations?.id || customerId}`);
+            await triggerStatusNotification('customer_approved', 'ผ่าน');
+          }
+        } else {
+          if (agent && agent.email) {
+            emailNotification = await emailService.sendReferralResult({
+              to: agent.email,
+              agentName,
+              customerName,
+              status: 'rejected',
+              reason: 'duplicate',
+              isSelfReferral
+            });
+            await triggerStatusNotification('customer_rejected', 'ไม่ผ่าน');
+            console.log(`[Email] Rejection notification (duplicate) sent to ${agent.email} for customer ${customerName}`);
+          } else {
+            console.warn(`[Email] Cannot send notification: Agent email not found for customer ${customerWithRelations?.id || customerId}`);
+            await triggerStatusNotification('customer_rejected', 'ไม่ผ่าน');
+          }
+        }
+      } catch (emailError) {
+        console.error('[Email] Failed to send create-time customer notification:', emailError.message);
+        emailNotification = { error: emailError.message };
+      }
+    }
+
+    if (emailNotification) {
+      customerWithRelations.emailNotification = emailNotification;
+    }
+
+    let responseMessage = 'สร้างลูกค้าใหม่สำเร็จ';
+    if (finalStatus === 'approved') {
+      responseMessage = 'บันทึกข้อมูลลูกค้าแล้ว (ผลตรวจ: ผ่าน)';
+    } else if (finalStatus === 'duplicate') {
+      responseMessage = 'บันทึกข้อมูลลูกค้าแล้ว (ผลตรวจ: ไม่ผ่าน)';
+    }
+
     res.status(201).json({
       success: true,
-      message: 'สร้างลูกค้าใหม่สำเร็จ',
-      data: customerWithRelations
+      message: responseMessage,
+      data: customerWithRelations,
+      ...(isAgentCreator
+        ? {
+          decision: {
+            passed: finalStatus === 'approved',
+            status: finalStatus,
+            reasons: duplicateReasons
+          }
+        }
+        : {})
     });
 
   } catch (error) {
@@ -3070,8 +3272,8 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
       include: getCustomerInclude()
     });
 
-    // Trigger email notification when status changes from pending
-    if (oldStatus === 'pending' && status && status !== 'pending') {
+    // Trigger email notification when status changes to a final decision
+    if (status && oldStatus !== status && ['approved', 'duplicate'].includes(status)) {
       try {
         const agent = updatedCustomer.agent;
         const customerName = `${updatedCustomer.firstName} ${updatedCustomer.lastName}`;
@@ -3091,26 +3293,32 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
           });
         };
 
-        if (agent && agent.email) {
-          const isSelfReferral = updatedCustomer.referralType === 'self';
-          const agentName = `${agent.firstName} ${agent.lastName}`;
-          
-          let emailResult;
-          
-          if (status === 'approved') {
-            // Send approval email
-            emailResult = await emailService.sendReferralResult({
-              to: agent.email,
+        const isSelfReferral = updatedCustomer.referralType === 'self';
+        const agentName = agent ? `${agent.firstName} ${agent.lastName}` : '-';
+
+        if (status === 'approved') {
+          const recipients = buildApprovedRecipientList({
+            agentEmail: agent?.email,
+            project: updatedCustomer.project
+          });
+
+          if (recipients.length > 0) {
+            updatedCustomer.emailNotification = await sendReferralResultToRecipients({
+              recipients,
               agentName,
               customerName,
               status: 'approved',
               isSelfReferral
             });
             await triggerStatusNotification('customer_approved', 'ผ่าน');
-            console.log(`[Email] Approval notification sent to ${agent.email} for customer ${customerName}`);
-          } else if (status === 'duplicate') {
-            // Send rejection email (duplicate)
-            emailResult = await emailService.sendReferralResult({
+            console.log(`[Email] Approval notifications sent to ${recipients.join(', ')} for customer ${customerName}`);
+          } else {
+            console.warn(`[Email] Cannot send approval notification: no recipients found for customer ${id}`);
+            await triggerStatusNotification('customer_approved', 'ผ่าน');
+          }
+        } else if (status === 'duplicate') {
+          if (agent && agent.email) {
+            updatedCustomer.emailNotification = await emailService.sendReferralResult({
               to: agent.email,
               agentName,
               customerName,
@@ -3120,16 +3328,8 @@ app.put('/api/customers/:id', checkAuth, async (req, res) => {
             });
             await triggerStatusNotification('customer_rejected', 'ไม่ผ่าน');
             console.log(`[Email] Rejection notification (duplicate) sent to ${agent.email} for customer ${customerName}`);
-          }
-          
-          // Attach email result to response
-          updatedCustomer.emailNotification = emailResult || null;
-        } else {
-          console.warn(`[Email] Cannot send notification: Agent email not found for customer ${id}`);
-
-          if (status === 'approved') {
-            await triggerStatusNotification('customer_approved', 'ผ่าน');
-          } else if (status === 'duplicate') {
+          } else {
+            console.warn(`[Email] Cannot send notification: Agent email not found for customer ${id}`);
             await triggerStatusNotification('customer_rejected', 'ไม่ผ่าน');
           }
         }
@@ -3242,7 +3442,25 @@ app.get('/api/projects', checkAuth, async (req, res) => {
 // POST /api/projects - Create a new project
 app.post('/api/projects', checkAuth, async (req, res) => {
   try {
-    const project = await Project.create(req.body);
+    const settings = buildProjectPassEmailSettings({
+      passEmailEnabled: req.body.passEmailEnabled,
+      passEmailRecipients: req.body.passEmailRecipients
+    });
+
+    if (settings.passEmailEnabled && settings.recipientList.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณาระบุอีเมลผู้รับอย่างน้อย 1 รายการเมื่อเปิดฟีเจอร์ส่งเมลผลผ่าน'
+      });
+    }
+
+    const payload = {
+      ...req.body,
+      passEmailEnabled: settings.passEmailEnabled,
+      passEmailRecipients: settings.passEmailRecipients
+    };
+
+    const project = await Project.create(payload);
     res.status(201).json({
       success: true,
       message: 'Project created successfully',
@@ -3290,7 +3508,40 @@ app.get('/api/projects/:id', checkAuth, async (req, res) => {
 app.put('/api/projects/:id', checkAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const [updated] = await Project.update(req.body, {
+
+    const payload = {
+      ...req.body
+    };
+
+    const hasPassEmailEnabled = Object.prototype.hasOwnProperty.call(req.body, 'passEmailEnabled');
+    const hasPassEmailRecipients = Object.prototype.hasOwnProperty.call(req.body, 'passEmailRecipients');
+
+    if (hasPassEmailEnabled || hasPassEmailRecipients) {
+      const existingProject = await Project.findByPk(id);
+      if (!existingProject) {
+        return res.status(404).json({
+          success: false,
+          message: 'Project not found',
+        });
+      }
+
+      const settings = buildProjectPassEmailSettings({
+        passEmailEnabled: hasPassEmailEnabled ? req.body.passEmailEnabled : existingProject.passEmailEnabled,
+        passEmailRecipients: hasPassEmailRecipients ? req.body.passEmailRecipients : existingProject.passEmailRecipients
+      });
+
+      if (settings.passEmailEnabled && settings.recipientList.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'กรุณาระบุอีเมลผู้รับอย่างน้อย 1 รายการเมื่อเปิดฟีเจอร์ส่งเมลผลผ่าน'
+        });
+      }
+
+      payload.passEmailEnabled = settings.passEmailEnabled;
+      payload.passEmailRecipients = settings.passEmailRecipients;
+    }
+
+    const [updated] = await Project.update(payload, {
       where: { id: id },
     });
 
@@ -3581,10 +3832,26 @@ app.get('/api/emails/logs', checkAuth, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const logs = await emailService.getRecentLogs(limit);
-    const parsedLogs = logs.map(log => ({
-      ...log,
-      data: log.data ? JSON.parse(log.data) : null
-    }));
+    const parsedLogs = logs.map(log => {
+      let parsedData = null;
+
+      if (log.data !== null && log.data !== undefined) {
+        if (typeof log.data === 'string') {
+          try {
+            parsedData = JSON.parse(log.data);
+          } catch (_) {
+            parsedData = log.data;
+          }
+        } else {
+          parsedData = log.data;
+        }
+      }
+
+      return {
+        ...log,
+        data: parsedData
+      };
+    });
     res.json({
       success: true,
       data: {
