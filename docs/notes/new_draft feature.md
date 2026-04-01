@@ -32,16 +32,16 @@
 ### 1. เริ่มต้น Backend Server
 
 ```bash
-cd "/Users/nk-lamy/Desktop/GeminiCLI/agentsena.sena.co.th/referral-system-new/backend"
+cd backend
 npm start
 ```
 
-**เซิร์ฟเวอร์จะรันที่:** `http://localhost:5001`
+**เซิร์ฟเวอร์จะรันที่:** `http://localhost:4000`
 
 ### 2. เริ่มต้น Frontend Development Server
 
 ```bash
-cd "/Users/nk-lamy/Desktop/GeminiCLI/agentsena.sena.co.th/referral-system-new/frontend"
+cd frontend
 npm run dev
 ```
 
@@ -369,24 +369,29 @@ kill -9 PID
 ## 📁 โครงสร้างโปรเจค
 
 ```
-referral-system-new/
-├── backend/                 # Node.js Backend
-│   ├── .env                # Environment variables
-│   ├── server.js           # Main server file
+referralsena-main/
+├── backend/                     # Node.js Backend
+│   ├── .env                     # Environment variables
+│   ├── server-mysql.js          # Main server file
 │   ├── src/
-│   │   └── config/         # Configuration files
-│   └── package.json        # Backend dependencies
-├── frontend/               # React Frontend
+│   │   ├── config/              # Configuration files
+│   │   ├── models/              # Database models
+│   │   └── services/            # Business logic services
+│   └── package.json             # Backend dependencies
+├── frontend/                    # React Frontend
 │   ├── src/
-│   │   ├── components/     # Reusable components
-│   │   ├── pages/          # Page components
-│   │   ├── store/          # Redux store และ slices
-│   │   ├── services/       # API services
-│   │   └── App.jsx         # Main App component
-│   ├── package.json        # Frontend dependencies
-│   └── vite.config.js      # Vite configuration
-├── database-schema.sql     # Database schema
-└── manualfeature.md        # คู่มือนี้
+│   │   ├── components/          # Reusable components
+│   │   ├── pages/               # Feature-based page folders
+│   │   ├── store/               # Redux store และ slices
+│   │   ├── services/            # API services
+│   │   └── App.jsx              # Main App component
+│   ├── public/assets/           # Static assets
+│   ├── package.json             # Frontend dependencies
+│   └── vite.config.js           # Vite configuration
+├── docs/                        # Guides และ notes
+├── scripts/                     # Deploy/local/security/test scripts
+├── database-schema.sql          # Database schema
+└── CLAUDE.md                    # Project context memory
 ```
 
 ---
@@ -437,29 +442,29 @@ referral-system-new/
 ## 📂 **Project Structure สรุป**
 
 ```
-referral-system-new/
-├── backend/                    # Node.js Backend
-│   ├── server.js              # Main server with all APIs
-│   ├── .env                   # Environment configuration
-│   └── src/config/            # Configuration files
-├── frontend/                  # React Frontend
+referralsena-main/
+├── backend/                         # Node.js Backend
+│   ├── server-mysql.js              # Main server with MySQL + Sequelize APIs
+│   ├── src/config/                  # Configuration files
+│   ├── src/models/                  # Database models
+│   └── src/services/                # Business logic services
+├── frontend/                        # React Frontend
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── LoginPage.jsx         # Login หน้าหลัก
-│   │   │   ├── AgentRegister.jsx     # Agent Registration
-│   │   │   ├── Dashboard.jsx         # Admin Dashboard
-│   │   │   ├── AgentDashboard.jsx    # Agent Dashboard
-│   │   │   ├── AgentManagement.jsx   # Agent Management
-│   │   │   └── CustomerManagement.jsx # Customer Management
-│   │   ├── store/
-│   │   │   ├── authSlice.js          # Authentication state
-│   │   │   ├── agentsSlice.js        # Agents state
-│   │   │   └── customersSlice.js     # Customers state
-│   │   └── services/
-│   │       └── api.js                # API service calls
-│   └── vite.config.js
-├── database-schema.sql        # Database schema
-└── manualfeature.md          # คู่มือนี้
+│   │   │   ├── auth/                # LoginPage, AgentRegister
+│   │   │   ├── dashboards/          # Dashboard, AgentDashboard
+│   │   │   ├── admin/               # AgentManagement, CustomerManagement
+│   │   │   ├── projects/            # ProjectManagement, ProjectForm
+│   │   │   ├── reports/             # ReportsPage
+│   │   │   └── settings/            # SettingsPage
+│   │   ├── store/                   # authSlice, agentsSlice, customersSlice
+│   │   └── services/api.js          # API service calls
+│   └── public/assets/               # Shared images and static assets
+├── docs/notes/                      # Notes and draft feature docs
+├── docs/guides/                     # API and deployment guides
+├── scripts/                         # Deploy/local/security/test scripts
+├── database-schema.sql              # Database schema
+└── CLAUDE.md                        # Project context memory
 ```
 
 ---

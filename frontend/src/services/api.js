@@ -3,7 +3,6 @@ import axios from 'axios';
 // ----- Base URLs (from env, with sensible defaults) -----
 const API_BASE =
   import.meta.env.VITE_API_BASE || 'http://localhost:4000/api';
-console.log("VITE_API_BASE =", import.meta.env.VITE_API_BASE);
 // derive origin for non-/api endpoints like /health
 const ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
@@ -73,7 +72,10 @@ export const agentsAPI = {
 };
 
 export const agentTypesAPI = {
-  getAll: () => api.get('/agent-types'),
+  getAll: (params) => api.get('/agent-types', { params }),
+  create: (data) => api.post('/agent-types', data),
+  update: (id, data) => api.put(`/agent-types/${id}`, data),
+  delete: (id) => api.delete(`/agent-types/${id}`),
 };
 
 export const productTypesAPI = {

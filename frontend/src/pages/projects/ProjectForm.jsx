@@ -8,19 +8,22 @@ import {
   Col,
   Typography,
   Select,
-  InputNumber
+  InputNumber,
+  Switch,
+  Divider
 } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, MailOutlined } from '@ant-design/icons';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
 const ProjectForm = ({ onBack, onSave, editingProject }) => {
   const [form] = Form.useForm();
+  const passEmailEnabled = Form.useWatch('passEmailEnabled', form);
 
   const onFinish = (values) => {
-    onSave(values); // Pass data to parent - let parent handle navigation
+    onSave(values);
   };
 
   return (
@@ -41,10 +44,13 @@ const ProjectForm = ({ onBack, onSave, editingProject }) => {
           initialValues={editingProject ? {
             ...editingProject,
             isActive: editingProject.isActive ? true : false,
+            passEmailEnabled: editingProject.passEmailEnabled ? true : false,
+            passEmailRecipients: editingProject.passEmailRecipients || '',
             priceRangeMin: editingProject.priceRangeMin ? Number(editingProject.priceRangeMin) : undefined,
             priceRangeMax: editingProject.priceRangeMax ? Number(editingProject.priceRangeMax) : undefined
           } : {
-            isActive: true, // Default to active
+            isActive: true,
+            passEmailEnabled: false,
             projectType: 'condo'
           }}
         >
@@ -156,6 +162,53 @@ const ProjectForm = ({ onBack, onSave, editingProject }) => {
               </Form.Item>
             </Col>
           </Row>
+
+          <Divider orientation="left">
+            <MailOutlined style={{ marginRight: 8 }} />
+            การแจ้งเตือนเมล์เมื่อลูกค้าผ่านเงื่อนไข
+          </Divider>
+
+          <Form.Item
+            name="passEmailEnabled"
+            label="เปิดการแจ้งเตือนทางอีเมล"
+            valuePropName="checked"
+          >
+            <Switch
+              checkedChildren="เปิด"
+              unCheckedChildren="ปิด"
+            />
+          </Form.Item>
+
+          {passEmailEnabled && (
+            <Form.Item
+              name="passEmailRecipients"
+              label="อีเมลผู้รับแจ้งเตือน"
+              extra="กรอกอีเมลเจ้าหน้าที่ที่ต้องการรับแจ้งเตือน คั่นด้วยเครื่องหมาย , หากมีหลายคน เช่น user1@sena.co.th, user2@sena.co.th"
+              rules={[
+                {
+                  required: true,
+                  message: 'กรุณากรอกอีเมลผู้รับแจ้งเตือนอย่างน้อย 1 คน'
+                },
+                {
+                  validator: (_, value) => {
+                    if (!value) return Promise.resolve();
+                    const emails = value.split(',').map(e => e.trim()).filter(Boolean);
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    const invalid = emails.filter(e => !emailRegex.test(e));
+                    if (invalid.length > 0) {
+                      return Promise.reject(new Error(`รูปแบบอีเมลไม่ถูกต้อง: ${invalid.join(', ')}`));
+                    }
+                    return Promise.resolve();
+                  }
+                }
+              ]}
+            >
+              <TextArea
+                rows={2}
+                placeholder="เช่น staff1@sena.co.th, staff2@sena.co.th"
+              />
+            </Form.Item>
+          )}
 
           <Form.Item>
             <Button type="primary" htmlType="submit">

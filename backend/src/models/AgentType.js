@@ -12,6 +12,12 @@ const AgentType = sequelize.define('AgentType', {
     allowNull: false,
     unique: true
   },
+  shortCode: {
+    type: DataTypes.STRING(2),
+    allowNull: false,
+    unique: true,
+    field: 'short_code'
+  },
   nameTh: {
     type: DataTypes.STRING(100),
     allowNull: false,

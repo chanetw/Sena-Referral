@@ -56,6 +56,16 @@ const Project = sequelize.define('Project', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     field: 'is_active'
+  },
+  passEmailEnabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'pass_email_enabled'
+  },
+  passEmailRecipients: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'pass_email_recipients'
   }
 }, {
   tableName: 'projects',

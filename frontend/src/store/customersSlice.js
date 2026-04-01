@@ -6,12 +6,9 @@ export const fetchCustomers = createAsyncThunk(
   'customers/fetchCustomers',
   async (params = {}, { rejectWithValue }) => {
     try {
-      console.log('=== fetchCustomers thunk called ===', params);
       const response = await customersAPI.getAll(params);
-      console.log('=== fetchCustomers response ===', response);
       return response;
     } catch (error) {
-      console.error('=== fetchCustomers error ===', error);
       return rejectWithValue(error.message);
     }
   }
@@ -69,12 +66,9 @@ export const fetchAgentsList = createAsyncThunk(
   'customers/fetchAgentsList',
   async (_, { rejectWithValue }) => {
     try {
-      console.log('=== fetchAgentsList thunk called ===');
       const response = await agentsAPI.getList();
-      console.log('=== fetchAgentsList response ===', response);
       return response;
     } catch (error) {
-      console.error('=== fetchAgentsList error ===', error);
       return rejectWithValue(error.message);
     }
   }
@@ -123,10 +117,8 @@ const customersSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchCustomers.fulfilled, (state, action) => {
-        console.log('=== fetchCustomers.fulfilled ===', action.payload);
         state.loading = false;
         state.customers = action.payload.data;
-        console.log('=== state.customers updated ===', state.customers);
         if (action.payload.pagination) {
           state.pagination = action.payload.pagination;
         }
@@ -210,17 +202,14 @@ const customersSlice = createSlice({
       
       // Fetch agents list
       .addCase(fetchAgentsList.pending, (state) => {
-        console.log('=== fetchAgentsList.pending ===');
         state.agentsLoading = true;
       })
       .addCase(fetchAgentsList.fulfilled, (state, action) => {
-        console.log('=== fetchAgentsList.fulfilled ===', action.payload);
         state.agentsLoading = false;
         state.agentsList = action.payload.data;
-        console.log('=== state.agentsList updated ===', state.agentsList);
+        state.error = null;
       })
       .addCase(fetchAgentsList.rejected, (state, action) => {
-        console.log('=== fetchAgentsList.rejected ===', action.payload);
         state.agentsLoading = false;
         state.error = action.payload;
       });

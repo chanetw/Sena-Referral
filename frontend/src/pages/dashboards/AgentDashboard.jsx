@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Layout,
   Menu,
@@ -19,7 +19,9 @@ import {
   Select,
   notification,
   Modal,
-  Tooltip
+  Tooltip,
+  Spin,
+  Result
 } from 'antd';
 import {
   MenuFoldOutlined,
@@ -35,13 +37,18 @@ import {
   SaveOutlined,
   UserAddOutlined,
   SearchOutlined,
-  CopyOutlined
+  CopyOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined,
+  MailOutlined,
+  PhoneOutlined
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { logoutUser, updateUser, getCurrentUser } from '../store/authSlice';
-import { fetchCustomers, setFilters, setPagination } from '../store/customersSlice';
+import { logoutUser, updateUser, getCurrentUser } from '../../store/authSlice';
+import { fetchCustomers, setFilters, setPagination } from '../../store/customersSlice';
 import { useNavigate } from 'react-router-dom';
-import { agentsAPI, projectsAPI, customersAPI, productTypesAPI } from '../services/api';
+import { agentsAPI, projectsAPI, customersAPI, productTypesAPI } from '../../services/api';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -67,6 +74,8 @@ const AgentDashboard = () => {
   const [productTypes, setProductTypes] = useState([]);
   const [productTypesLoading, setProductTypesLoading] = useState(false);
   const [isAddCustomerModalVisible, setIsAddCustomerModalVisible] = useState(false);
+  const [checkingModal, setCheckingModal] = useState({ visible: false, phase: 'checking', data: null });
+  const checkingTimerRef = useRef(null);
 
   const loadAgentCustomers = ({ page = 1, limit = 10, search = '' } = {}) => {
     if (!user?.agentId) return;
@@ -217,6 +226,25 @@ const AgentDashboard = () => {
     }
   };
 
+  const copyProfileValue = async (value, successMessage) => {
+    if (!value) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      notification.success({
+        message: successMessage,
+        duration: 1.5
+      });
+    } catch (error) {
+      notification.error({
+        message: 'คัดลอกไม่สำเร็จ',
+        duration: 1.5
+      });
+    }
+  };
+
   const handleAddCustomer = async (values) => {
     setLoading(true);
     try {
@@ -251,15 +279,28 @@ const AgentDashboard = () => {
         status: 'pending'
       };
 
-      const data = await customersAPI.create(customerData);
+      // Close add form and show checking animation
+      setIsAddCustomerModalVisible(false);
+      setCheckingModal({ visible: true, phase: 'checking', data: null });
 
-      if (data.success) {
-        notification.success({
-          message: 'สำเร็จ',
-          description: 'เพิ่มข้อมูลลูกค้าสำเร็จ'
-        });
+      const startTime = Date.now();
+      const data = await customersAPI.create(customerData);
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(2500 - elapsed, 0);
+
+      // Ensure checking animation shows for at least 2.5 seconds
+      checkingTimerRef.current = setTimeout(() => {
+        if (data.success && data.decision) {
+          setCheckingModal({ visible: true, phase: 'result', data: data });
+        } else if (data.success) {
+          setCheckingModal({ visible: false, phase: 'checking', data: null });
+          notification.success({
+            message: 'สำเร็จ',
+            description: 'เพิ่มข้อมูลลูกค้าสำเร็จ'
+          });
+        }
+
         addCustomerForm.resetFields();
-        // Refresh customer list
         dispatch(setPagination({ current: 1 }));
         dispatch(fetchCustomers({
           agentId: user.agentId,
@@ -268,12 +309,11 @@ const AgentDashboard = () => {
           page: 1,
           limit: pagination.pageSize || 10
         }));
-        setIsAddCustomerModalVisible(false);
         setSelectedMenu('customers');
-      } else {
-        throw new Error(data.message);
-      }
+      }, remaining);
+
     } catch (error) {
+      setCheckingModal({ visible: false, phase: 'checking', data: null });
       notification.error({
         message: 'เกิดข้อผิดพลาด',
         description: error.message || 'ไม่สามารถเพิ่มข้อมูลลูกค้าได้'
@@ -282,6 +322,13 @@ const AgentDashboard = () => {
       setLoading(false);
     }
   };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (checkingTimerRef.current) clearTimeout(checkingTimerRef.current);
+    };
+  }, []);
 
   const userMenuItems = [
     {
@@ -571,155 +618,221 @@ const AgentDashboard = () => {
           </Card>
         );
       case 'profile':
+        const profileCodeCards = [
+          {
+            title: 'รหัสเอเจนต์',
+            value: user?.agentCode || '-',
+            background: 'linear-gradient(135deg, #f6ffed 0%, #ffffff 100%)',
+            borderColor: '#b7eb8f',
+            textColor: '#52c41a',
+            message: 'คัดลอกรหัสเอเจนต์แล้ว'
+          },
+          {
+            title: 'รหัสแนะนำ',
+            value: user?.refCode || '-',
+            background: 'linear-gradient(135deg, #e6f4ff 0%, #ffffff 100%)',
+            borderColor: '#91caff',
+            textColor: '#1677ff',
+            message: 'คัดลอกรหัสแนะนำแล้ว'
+          }
+        ];
+
+        const identityItems = [
+          {
+            label: 'ชื่อ-นามสกุล',
+            value: `${user?.firstName || '-'} ${user?.lastName || ''}`.trim(),
+            icon: <UserOutlined style={{ color: '#13c2c2' }} />
+          },
+          {
+            label: 'อีเมล',
+            value: user?.email || '-',
+            icon: <MailOutlined style={{ color: '#1677ff' }} />
+          },
+          {
+            label: 'เบอร์โทร',
+            value: user?.phone || '-',
+            icon: <PhoneOutlined style={{ color: '#fa8c16' }} />
+          },
+          {
+            label: 'บทบาท',
+            value: 'เอเจนต์',
+            icon: <TeamOutlined style={{ color: '#722ed1' }} />
+          }
+        ];
+
         return (
           <div>
-            <Card
-              style={{
-                overflow: 'hidden',
-                border: 'none',
-                borderRadius: '16px',
-                boxShadow: '0 8px 24px rgba(0,21,41,.08)'
-              }}
-              styles={{ body: { padding: 0 } }}
-            >
-              <div style={{
-                background: 'linear-gradient(135deg, #1890ff 0%, #0050b3 100%)',
-                color: 'white',
-                padding: '32px 24px'
-              }}>
-                <Row gutter={[24, 24]} align="middle">
-                  <Col xs={24} md={16}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-                      <div style={{
-                        width: '84px',
-                        height: '84px',
-                        background: 'rgba(255, 255, 255, 0.22)',
-                        border: '1px solid rgba(255, 255, 255, 0.28)',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '30px',
-                        fontWeight: 700,
-                        backdropFilter: 'blur(6px)',
-                        flexShrink: 0
-                      }}>
-                        {(user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '14px', opacity: 0.85, marginBottom: '6px' }}>โปรไฟล์เอเจนต์</div>
-                        <div style={{ fontSize: '28px', fontWeight: 700, lineHeight: 1.2, marginBottom: '8px' }}>
-                          {user?.firstName} {user?.lastName}
+            <div style={{ display: 'grid', gap: '24px' }}>
+              <Card
+                style={{
+                  overflow: 'hidden',
+                  border: 'none',
+                  borderRadius: '20px',
+                  boxShadow: '0 10px 30px rgba(0,21,41,.08)'
+                }}
+                styles={{ body: { padding: 0 } }}
+              >
+                <div
+                  style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #00BCD4 0%, #0097A7 100%)',
+                    color: 'white',
+                    padding: '28px 24px'
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      width: '220px',
+                      height: '220px',
+                      borderRadius: '50%',
+                      background: 'rgba(255, 255, 255, 0.10)',
+                      top: '-90px',
+                      right: '-40px'
+                    }}
+                  />
+                  <Row gutter={[24, 24]} align="middle" style={{ position: 'relative' }}>
+                    <Col xs={24} lg={14}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
+                        <div
+                          style={{
+                            width: '88px',
+                            height: '88px',
+                            background: 'rgba(255, 255, 255, 0.20)',
+                            border: '1px solid rgba(255, 255, 255, 0.28)',
+                            borderRadius: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '30px',
+                            fontWeight: 700,
+                            backdropFilter: 'blur(6px)',
+                            flexShrink: 0
+                          }}
+                        >
+                          {(user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')}
                         </div>
-                        <div style={{ fontSize: '15px', opacity: 0.92, marginBottom: '12px' }}>
-                          {user?.agentCode} - เอเจนต์
+                        <div>
+                          <div style={{ fontSize: '12px', opacity: 0.88, letterSpacing: '0.08em', marginBottom: '6px' }}>AGENT PROFILE</div>
+                          <div style={{ fontSize: '30px', fontWeight: 700, lineHeight: 1.15, marginBottom: '10px' }}>
+                            {user?.firstName} {user?.lastName}
+                          </div>
+                          <Space size={8} wrap>
+                            <Tag color="green" style={{ borderRadius: '999px', paddingInline: '10px', fontWeight: 600 }}>
+                              ใช้งาน
+                            </Tag>
+                            <Tag color="blue" style={{ borderRadius: '999px', paddingInline: '10px' }}>
+                              เอเจนต์
+                            </Tag>
+                          </Space>
                         </div>
-                        <Tag color="green" style={{ borderRadius: '999px', paddingInline: '10px' }}>
-                          ใช้งาน
-                        </Tag>
                       </div>
-                    </div>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <div style={{
-                      background: 'rgba(255, 255, 255, 0.14)',
-                      border: '1px solid rgba(255, 255, 255, 0.18)',
-                      borderRadius: '14px',
-                      padding: '16px',
-                      textAlign: 'left'
-                    }}>
-                      <div style={{ fontSize: '13px', opacity: 0.82, marginBottom: '6px' }}>ช่องทางติดต่อหลัก</div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>{user?.phone || '-'}</div>
-                      <div style={{ fontSize: '13px', opacity: 0.82 }}>สามารถแก้ไขได้จากปุ่มด้านล่าง</div>
-                    </div>
-                  </Col>
-                </Row>
-              </div>
-
-              <div style={{ padding: '24px' }}>
-                <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
-                  <Col xs={24} lg={16}>
-                    <Card
-                      title="ข้อมูลส่วนตัว"
-                      style={{ borderRadius: '14px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}
-                    >
-                      <Row gutter={[16, 16]}>
-                        <Col xs={24} sm={12}>
-                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
-                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>รหัสเอเจนต์</div>
-                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.agentCode || '-'}</div>
-                          </Card>
-                        </Col>
-                        <Col xs={24} sm={12}>
-                          <Card size="small" style={{ borderRadius: '12px', background: '#e6f4ff', border: '1px solid #91caff' }} styles={{ body: { padding: '16px' } }}>
-                            <div style={{ fontSize: '12px', color: '#1677ff', marginBottom: '8px', fontWeight: 500 }}>รหัสแนะนำ (Referral Code)</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '22px', fontWeight: 700, color: '#0958d9', fontFamily: 'monospace', letterSpacing: '2px' }}>{user?.refCode || '-'}</span>
-                              {user?.refCode && (
-                                <Tooltip title="คัดลอกรหัสแนะนำ">
-                                  <Button
-                                    type="text"
-                                    size="small"
-                                    icon={<CopyOutlined />}
-                                    style={{ color: '#1677ff' }}
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(user.refCode);
-                                      notification.success({ message: 'คัดลอกรหัสแนะนำแล้ว', duration: 1.5 });
-                                    }}
-                                  />
-                                </Tooltip>
-                              )}
+                    </Col>
+                    <Col xs={24} lg={10}>
+                      <div style={{ display: 'grid', gap: '12px' }}>
+                        {profileCodeCards.map((item) => (
+                          <div
+                            key={item.title}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '12px',
+                              padding: '14px 16px',
+                              borderRadius: '16px',
+                              background: item.background,
+                              border: `1px solid ${item.borderColor}`,
+                              boxShadow: '0 8px 18px rgba(255,255,255,0.12)'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{item.title}</div>
+                              <div style={{ fontSize: '26px', fontWeight: 700, color: item.textColor, lineHeight: 1.1, letterSpacing: '0.04em' }}>
+                                {item.value}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '11px', color: '#595959', marginTop: '6px' }}>แชร์รหัสนี้ให้ลูกบ้านใช้ลงทะเบียน</div>
-                          </Card>
+                            {item.value !== '-' ? (
+                              <Tooltip title="คัดลอก">
+                                <Button
+                                  type="text"
+                                  icon={<CopyOutlined />}
+                                  onClick={() => copyProfileValue(item.value, item.message)}
+                                  style={{ color: item.textColor }}
+                                />
+                              </Tooltip>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+              </Card>
+
+              <Row gutter={[16, 16]}>
+                <Col xs={24} lg={16}>
+                  <Card
+                    title="ข้อมูลบัญชี"
+                    style={{ borderRadius: '16px', boxShadow: '0 6px 18px rgba(0,0,0,0.05)' }}
+                  >
+                    <Row gutter={[14, 14]}>
+                      {identityItems.map((item) => (
+                        <Col xs={24} md={12} key={item.label}>
+                          <div
+                            style={{
+                              height: '100%',
+                              display: 'flex',
+                              gap: '12px',
+                              alignItems: 'flex-start',
+                              padding: '14px 16px',
+                              borderRadius: '14px',
+                              background: '#fafafa',
+                              border: '1px solid #f0f0f0'
+                            }}
+                          >
+                            <div style={{ fontSize: '18px', marginTop: '2px' }}>{item.icon}</div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '6px' }}>{item.label}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626', wordBreak: 'break-word' }}>{item.value}</div>
+                            </div>
+                          </div>
                         </Col>
-                        <Col xs={24} sm={12}>
-                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
-                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>อีเมล</div>
-                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626', wordBreak: 'break-word' }}>{user?.email || '-'}</div>
-                          </Card>
-                        </Col>
-                        <Col xs={24} sm={12}>
-                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
-                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>ชื่อ</div>
-                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.firstName || '-'}</div>
-                          </Card>
-                        </Col>
-                        <Col xs={24} sm={12}>
-                          <Card size="small" style={{ borderRadius: '12px', background: '#fafafa' }} styles={{ body: { padding: '16px' } }}>
-                            <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>นามสกุล</div>
-                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#262626' }}>{user?.lastName || '-'}</div>
-                          </Card>
-                        </Col>
-                      </Row>
-                    </Card>
-                  </Col>
-                  <Col xs={24} lg={8}>
-                    <Card
-                      title="การติดต่อ"
-                      style={{ borderRadius: '14px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', height: '100%' }}
-                    >
-                      <div style={{
-                        background: '#f5faff',
-                        border: '1px solid #d6e4ff',
-                        borderRadius: '12px',
+                      ))}
+                    </Row>
+                  </Card>
+                </Col>
+                <Col xs={24} lg={8}>
+                  <Card
+                    title="การจัดการโปรไฟล์"
+                    style={{ borderRadius: '16px', boxShadow: '0 6px 18px rgba(0,0,0,0.05)', height: '100%' }}
+                  >
+                    <div
+                      style={{
                         padding: '16px',
+                        borderRadius: '14px',
+                        border: '1px solid #d6e4ff',
+                        background: 'linear-gradient(135deg, #f5faff 0%, #ffffff 100%)',
                         marginBottom: '16px'
-                      }}>
-                        <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '8px' }}>เบอร์โทรปัจจุบัน</div>
-                        <div style={{ fontSize: '22px', fontWeight: 700, color: '#0050b3', lineHeight: 1.2 }}>{user?.phone || '-'}</div>
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '6px' }}>ช่องทางติดต่อหลัก</div>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#0050b3', lineHeight: 1.2, wordBreak: 'break-word' }}>
+                        {user?.phone || '-'}
                       </div>
-                      <div style={{ color: '#8c8c8c', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>
-                        หากต้องการเปลี่ยนเบอร์โทร สามารถกดปุ่มด้านล่างเพื่อเปิดหน้าต่างแก้ไขได้ทันที
+                      <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '8px', lineHeight: 1.6 }}>
+                        อัปเดตเบอร์โทรให้เป็นปัจจุบันเพื่อให้ทีมงานและลูกค้าติดต่อได้สะดวก
                       </div>
-                      <Button type="primary" block icon={<EditOutlined />} onClick={handleEditProfile}>
-                        แก้ไขเบอร์โทร
-                      </Button>
-                    </Card>
-                  </Col>
-                </Row>
-              </div>
-            </Card>
+                    </div>
+                    <div style={{ color: '#8c8c8c', fontSize: '13px', lineHeight: 1.7, marginBottom: '16px' }}>
+                      หากต้องการแก้ไขเบอร์โทร สามารถกดปุ่มด้านล่างเพื่อเปิดฟอร์มแก้ไขได้ทันที โดยข้อมูลอื่นของบัญชีจะยังคงเดิม
+                    </div>
+                    <Button type="primary" block icon={<EditOutlined />} onClick={handleEditProfile}>
+                      แก้ไขเบอร์โทร
+                    </Button>
+                  </Card>
+                </Col>
+              </Row>
+            </div>
           </div>
         );
       default:
@@ -973,6 +1086,72 @@ const AgentDashboard = () => {
                 </Space>
               </Form.Item>
             </Form>
+          </Modal>
+
+          {/* Checking Animation + Result Modal */}
+          <Modal
+            open={checkingModal.visible}
+            footer={checkingModal.phase === 'result' ? [
+              <Button key="close" type="primary" onClick={() => setCheckingModal({ visible: false, phase: 'checking', data: null })}>
+                ปิด
+              </Button>
+            ] : null}
+            closable={checkingModal.phase === 'result'}
+            onCancel={() => {
+              if (checkingModal.phase === 'result') {
+                setCheckingModal({ visible: false, phase: 'checking', data: null });
+              }
+            }}
+            centered
+            width={480}
+            maskClosable={false}
+          >
+            {checkingModal.phase === 'checking' && (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <Spin indicator={<LoadingOutlined style={{ fontSize: 48, color: '#1890ff' }} spin />} />
+                <div style={{ marginTop: 24 }}>
+                  <Title level={4} style={{ marginBottom: 8 }}>กำลังตรวจสอบข้อมูล...</Title>
+                  <Text type="secondary">ระบบกำลังตรวจสอบเลขบัตรประชาชนกับฐานข้อมูล</Text>
+                </div>
+              </div>
+            )}
+            {checkingModal.phase === 'result' && checkingModal.data?.decision && (() => {
+              const { passed, reasons } = checkingModal.data.decision;
+              return (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  {passed ? (
+                    <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a' }} />
+                  ) : (
+                    <CloseCircleOutlined style={{ fontSize: 64, color: '#ff4d4f' }} />
+                  )}
+                  <Title level={4} style={{ marginTop: 16, marginBottom: 8 }}>
+                    {passed ? 'ผ่านเงื่อนไข' : 'ไม่ผ่านเงื่อนไข'}
+                  </Title>
+                  <Text type="secondary">{checkingModal.data.message}</Text>
+                  {Array.isArray(reasons) && reasons.length > 0 && (
+                    <div style={{ marginTop: 16, textAlign: 'left', background: '#fafafa', borderRadius: 8, padding: 16 }}>
+                      {reasons.map((r, idx) => (
+                        <div key={idx} style={{ marginBottom: idx < reasons.length - 1 ? 12 : 0 }}>
+                          <Text strong style={{ color: '#ff4d4f' }}>{r.message}</Text>
+                          {r.existingData && (
+                            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                              {r.existingData.customerCode ? `รหัส: ${r.existingData.customerCode} ` : ''}
+                              {r.existingData.firstName ? `${r.existingData.firstName} ${r.existingData.lastName}` : ''}
+                              {r.existingData.idCard ? ` (บัตร: ${r.existingData.idCard})` : ''}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {passed && (
+                    <div style={{ marginTop: 16 }}>
+                      <Text type="secondary">ระบบได้แจ้งผลทางอีเมลเรียบร้อยแล้ว</Text>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </Modal>
 
           <Modal

@@ -20,7 +20,7 @@ import {
   ExpandAltOutlined,
   ShrinkOutlined
 } from '@ant-design/icons';
-import { agentsAPI, customersAPI, projectsAPI } from '../services/api';
+import { agentsAPI, customersAPI, projectsAPI } from '../../services/api';
 
 const { Title, Text } = Typography;
 

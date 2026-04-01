@@ -155,7 +155,7 @@ VITE_APP_TITLE=SENA Agent System
 
 > **สำคัญ**: ถ้าเปลี่ยน `VITE_API_BASE` ต้อง rebuild web image ด้วย:
 > ```bash
-> bash build-and-push.sh latest http://YOUR_SERVER_IP:4000/api
+> bash scripts/deploy/build-and-push.sh latest http://YOUR_SERVER_IP:4000/api
 > ```
 > เพราะ VITE_API_BASE embed เข้า static bundle ตอน build time
 
@@ -317,7 +317,8 @@ DB_CONNECT_RETRY_DELAY=5000 # ms ระหว่าง retry (default: 5000)
 | `frontend/.env.prod` | Frontend config (VITE_API_BASE) |
 | `database/setup-external-db.sql` | SQL รวมสำหรับสร้าง DB + schema + triggers |
 | `backups/sena_referral_current.sql` | Database dump (ข้อมูลจริง) |
-| `build-and-push.sh` | Script สำหรับ rebuild + push Docker images |
+| `scripts/deploy/build-and-push.sh` | Script สำหรับ rebuild + push Docker images |
+| `docs/guides/DEPLOY-EXTERNAL-DB.md` | คู่มือฉบับนี้สำหรับ deployment แบบ external DB |
 
 ---
 

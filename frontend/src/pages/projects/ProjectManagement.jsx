@@ -9,10 +9,11 @@ import {
   Tag,
   Space,
   Popconfirm,
-  message
+  message,
+  Tooltip
 } from 'antd';
-import { PlusOutlined, ProjectOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
-import { projectsAPI } from '../services/api';
+import { PlusOutlined, ProjectOutlined, EditOutlined, DeleteOutlined, MailOutlined } from '@ant-design/icons';
+import { projectsAPI } from '../../services/api';
 import ProjectForm from './ProjectForm';
 
 const { Title } = Typography;
@@ -22,6 +23,7 @@ const ProjectManagement = () => {
   const [editingProject, setEditingProject] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [togglingNotificationProjectId, setTogglingNotificationProjectId] = useState(null);
   const [pagination, setPagination] = useState({
     current: 1,
     pageSize: 10,
@@ -75,6 +77,49 @@ const ProjectManagement = () => {
       console.error('Error deleting project:', error);
       message.error('ไม่สามารถลบโครงการได้');
     }
+  };
+
+  const handleToggleNotification = async (project) => {
+    try {
+      setTogglingNotificationProjectId(project.id);
+      const nextEnabled = !project.passEmailEnabled;
+      await projectsAPI.update(project.id, {
+        passEmailEnabled: nextEnabled,
+        passEmailRecipients: project.passEmailRecipients
+      });
+      message.success(nextEnabled ? 'เปิดการแจ้งเตือนเมล์แล้ว' : 'ปิดการแจ้งเตือนเมล์แล้ว');
+      fetchProjects(pagination.current, pagination.pageSize);
+    } catch (error) {
+      console.error('Error toggling project notification:', error);
+      message.error(error?.response?.data?.message || 'ไม่สามารถเปลี่ยนสถานะการแจ้งเตือนได้');
+    } finally {
+      setTogglingNotificationProjectId(null);
+    }
+  };
+
+  const renderEmailRecipients = (value) => {
+    const emails = typeof value === 'string'
+      ? value.split(',').map((email) => email.trim()).filter(Boolean)
+      : [];
+
+    if (emails.length === 0) {
+      return '-';
+    }
+
+    return (
+      <Tooltip title={emails.join(', ')}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {emails.slice(0, 2).map((email) => (
+            <Tag key={email} color="blue" style={{ marginRight: 0, width: 'fit-content' }}>
+              {email}
+            </Tag>
+          ))}
+          {emails.length > 2 && (
+            <span style={{ fontSize: 12, color: '#8c8c8c' }}>+{emails.length - 2} รายการ</span>
+          )}
+        </div>
+      </Tooltip>
+    );
   };
 
   const handleBack = () => {
@@ -181,11 +226,11 @@ const ProjectManagement = () => {
       render: (value) => (value ? new Date(value).toLocaleString('th-TH') : '-')
     },
     {
-      title: 'project_sale',
-      dataIndex: 'projectSale',
-      key: 'projectSale',
-      width: 160,
-      render: (value) => value || '-'
+      title: 'อีเมลโครงการ',
+      dataIndex: 'passEmailRecipients',
+      key: 'passEmailRecipients',
+      width: 220,
+      render: (value) => renderEmailRecipients(value)
     },
     {
       title: 'bud',
@@ -193,6 +238,31 @@ const ProjectManagement = () => {
       key: 'bud',
       width: 100,
       render: (value) => (value !== null && value !== undefined ? value : '-')
+    },
+    {
+      title: 'แจ้งเตือน',
+      key: 'notification',
+      width: 90,
+      align: 'center',
+      render: (_, record) => (
+        <Tooltip title={record.passEmailEnabled ? 'คลิกเพื่อปิดแจ้งเตือนเมล์' : 'คลิกเพื่อเปิดแจ้งเตือนเมล์'}>
+          <Button
+            type="text"
+            size="small"
+            icon={
+              <MailOutlined
+                style={{
+                  color: record.passEmailEnabled ? '#52c41a' : '#d9d9d9',
+                  fontSize: 18
+                }}
+              />
+            }
+            loading={togglingNotificationProjectId === record.id}
+            onClick={() => handleToggleNotification(record)}
+            style={{ padding: 0, minWidth: 24 }}
+          />
+        </Tooltip>
+      )
     },
     {
       title: 'การดำเนินการ',

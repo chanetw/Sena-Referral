@@ -44,8 +44,8 @@ import {
   setFilters,
   setPagination,
   clearError
-} from '../store/customersSlice';
-import { projectsAPI, customersAPI, productTypesAPI } from '../services/api';
+} from '../../store/customersSlice';
+import { projectsAPI, customersAPI, productTypesAPI } from '../../services/api';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -280,28 +280,39 @@ const CustomerManagement = () => {
       }
     },
     {
-      title: 'อีเมล',
-      dataIndex: 'email',
-      key: 'email',
-      width: 160,
+      title: 'เลขบัตรประชาชน',
+      dataIndex: 'idCard',
+      key: 'idCard',
+      width: 140,
       render: (text) => text ? (
-        <Space>
-          <MailOutlined />
-          <span>{text}</span>
-        </Space>
+        <span>{text}</span>
       ) : '-'
     },
     {
-      title: 'เบอร์โทร',
-      dataIndex: 'phone',
-      key: 'phone',
-      width: 115,
-      render: (text) => (text && text.trim() !== '') ? (
-        <Space>
-          <PhoneOutlined />
-          <span>{text}</span>
-        </Space>
-      ) : '-'
+      title: 'ติดต่อ',
+      key: 'contact',
+      width: 170,
+      render: (_, record) => {
+        const email = record.email || null;
+        const phone = record.phone || null;
+        if (!email && !phone) return '-';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {phone && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <PhoneOutlined />
+                <span>{phone}</span>
+              </div>
+            )}
+            {email && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: phone ? 6 : 0 }}>
+                <MailOutlined />
+                <span style={{ wordBreak: 'break-all' }}>{email}</span>
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       title: 'ชื่อโครงการ',
@@ -623,11 +634,40 @@ const CustomerManagement = () => {
         });
       } else {
         // Create new customer
-        await dispatch(createCustomer(customerData)).unwrap();
-        notification.success({
-          message: 'สำเร็จ',
-          description: 'เพิ่มลูกค้าสำเร็จ',
-        });
+        const res = await dispatch(createCustomer(customerData)).unwrap();
+        if (res && res.decision) {
+          const { passed, status, reasons } = res.decision;
+          Modal.info({
+            title: `ผลการตรวจสอบ: ${passed ? 'ผ่าน' : 'ไม่ผ่าน'}`,
+            content: (
+              <div>
+                <p>{res.message}</p>
+                {Array.isArray(reasons) && reasons.length > 0 && (
+                  reasons.map((r, idx) => (
+                    <div key={idx} style={{ marginBottom: 8 }}>
+                      <div style={{ fontWeight: 600 }}>{r.message}</div>
+                      {r.existingData && (
+                        <div style={{ fontSize: 12, color: '#666' }}>
+                          {r.existingData.customerCode ? `รหัสลูกค้า: ${r.existingData.customerCode} ` : ''}
+                          {r.existingData.firstName ? `${r.existingData.firstName} ${r.existingData.lastName}` : ''}
+                          {r.existingData.idCard ? ` (บัตร: ${r.existingData.idCard})` : ''}
+                          {r.existingData.email ? ` • ${r.existingData.email}` : ''}
+                          {r.existingData.phone ? ` • ${r.existingData.phone}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            ),
+            okText: 'ปิด'
+          });
+        } else {
+          notification.success({
+            message: 'สำเร็จ',
+            description: 'เพิ่มลูกค้าสำเร็จ',
+          });
+        }
       }
       setIsModalVisible(false);
       form.resetFields();
@@ -676,7 +716,7 @@ const CustomerManagement = () => {
         <Row gutter={16} style={{ marginBottom: '16px' }}>
           <Col xs={24} sm={12} md={8}>
             <Input.Search
-              placeholder="ค้นหาด้วยชื่อ, รหัสลูกค้า, อีเมล, หรือเบอร์โทร"
+              placeholder="ค้นหาด้วยชื่อ, รหัสลูกค้า, เลขบัตรประชาชน, อีเมล, หรือเบอร์โทร"
               allowClear
               enterButton={<SearchOutlined />}
               onSearch={handleSearch}

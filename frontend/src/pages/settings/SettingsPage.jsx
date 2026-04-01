@@ -17,7 +17,7 @@ import {
   notification
 } from 'antd';
 import { DeleteOutlined, EditOutlined, MailOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
-import { notificationRulesAPI, productTypesAPI } from '../services/api';
+import { notificationRulesAPI, productTypesAPI, agentTypesAPI } from '../../services/api';
 
 const { Title, Text } = Typography;
 const NOTIFICATION_ACTION_OPTIONS = [
@@ -60,8 +60,14 @@ const SettingsPage = () => {
   const [editingNotificationRule, setEditingNotificationRule] = useState(null);
   const [testingNotificationRuleId, setTestingNotificationRuleId] = useState(null);
 
+  const [agentTypes, setAgentTypes] = useState([]);
+  const [agentTypeLoading, setAgentTypeLoading] = useState(false);
+  const [agentTypeModalVisible, setAgentTypeModalVisible] = useState(false);
+  const [editingAgentType, setEditingAgentType] = useState(null);
+
   const [form] = Form.useForm();
   const [notificationForm] = Form.useForm();
+  const [agentTypeForm] = Form.useForm();
 
   const fetchProductTypes = async () => {
     try {
@@ -93,9 +99,25 @@ const SettingsPage = () => {
     }
   };
 
+  const fetchAgentTypes = async () => {
+    try {
+      setAgentTypeLoading(true);
+      const response = await agentTypesAPI.getAll({ all: true });
+      setAgentTypes(response.data || []);
+    } catch (error) {
+      notification.error({
+        message: 'เกิดข้อผิดพลาด',
+        description: error.message || 'ไม่สามารถโหลดข้อมูลประเภทเอเจนต์ได้'
+      });
+    } finally {
+      setAgentTypeLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProductTypes();
     fetchNotificationRules();
+    fetchAgentTypes();
   }, []);
 
   const handleCreate = () => {
@@ -249,6 +271,72 @@ const SettingsPage = () => {
       notification.error({
         message: 'เกิดข้อผิดพลาด',
         description: error.message || 'ไม่สามารถบันทึก notification rule ได้'
+      });
+    }
+  };
+
+  const handleAgentTypeCreate = () => {
+    setEditingAgentType(null);
+    agentTypeForm.resetFields();
+    agentTypeForm.setFieldsValue({ isActive: true, sortOrder: 0 });
+    setAgentTypeModalVisible(true);
+  };
+
+  const handleAgentTypeEdit = (record) => {
+    setEditingAgentType(record);
+    agentTypeForm.setFieldsValue({
+      code: record.code,
+      shortCode: record.shortCode,
+      nameTh: record.nameTh,
+      sortOrder: record.sortOrder,
+      isActive: record.isActive
+    });
+    setAgentTypeModalVisible(true);
+  };
+
+  const handleAgentTypeDelete = async (id) => {
+    try {
+      await agentTypesAPI.delete(id);
+      notification.success({
+        message: 'สำเร็จ',
+        description: 'ปิดใช้งานประเภทเอเจนต์สำเร็จ'
+      });
+      fetchAgentTypes();
+    } catch (error) {
+      notification.error({
+        message: 'เกิดข้อผิดพลาด',
+        description: error.response?.data?.message || error.message || 'ไม่สามารถลบประเภทเอเจนต์ได้'
+      });
+    }
+  };
+
+  const handleAgentTypeSubmit = async (values) => {
+    try {
+      const payload = {
+        ...values,
+        shortCode: values.shortCode?.toUpperCase()
+      };
+      if (editingAgentType) {
+        await agentTypesAPI.update(editingAgentType.id, payload);
+        notification.success({
+          message: 'สำเร็จ',
+          description: 'อัพเดทประเภทเอเจนต์สำเร็จ'
+        });
+      } else {
+        await agentTypesAPI.create(payload);
+        notification.success({
+          message: 'สำเร็จ',
+          description: 'เพิ่มประเภทเอเจนต์สำเร็จ'
+        });
+      }
+      setAgentTypeModalVisible(false);
+      setEditingAgentType(null);
+      agentTypeForm.resetFields();
+      fetchAgentTypes();
+    } catch (error) {
+      notification.error({
+        message: 'เกิดข้อผิดพลาด',
+        description: error.response?.data?.message || error.message || 'ไม่สามารถบันทึกประเภทเอเจนต์ได้'
       });
     }
   };
@@ -414,6 +502,88 @@ const SettingsPage = () => {
           />
         </Card>
       )
+    },
+    {
+      key: 'agent-types',
+      label: 'ประเภทเอเจนต์',
+      children: (
+        <Card>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <Title level={4} style={{ marginBottom: 4 }}>จัดการประเภทเอเจนต์</Title>
+              <Text type="secondary">ตั้งค่าประเภทเอเจนต์และรหัสย่อ (Short Code) สำหรับสร้างรหัสเอเจนต์อัตโนมัติ เช่น ST26A001</Text>
+            </div>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAgentTypeCreate}>
+              เพิ่มประเภทเอเจนต์
+            </Button>
+          </div>
+
+          <Table
+            rowKey="id"
+            columns={[
+              {
+                title: 'Code',
+                dataIndex: 'code',
+                key: 'code',
+                width: 160,
+                render: (value) => <Tag color="geekblue">{value}</Tag>
+              },
+              {
+                title: 'รหัสย่อ',
+                dataIndex: 'shortCode',
+                key: 'shortCode',
+                width: 100,
+                render: (value) => <Tag color="volcano">{value}</Tag>
+              },
+              {
+                title: 'ชื่อประเภท',
+                dataIndex: 'nameTh',
+                key: 'nameTh'
+              },
+              {
+                title: 'ลำดับ',
+                dataIndex: 'sortOrder',
+                key: 'sortOrder',
+                width: 80
+              },
+              {
+                title: 'สถานะ',
+                dataIndex: 'isActive',
+                key: 'isActive',
+                width: 120,
+                render: (isActive) => (
+                  <Tag color={isActive ? 'green' : 'default'}>
+                    {isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                  </Tag>
+                )
+              },
+              {
+                title: 'การจัดการ',
+                key: 'actions',
+                width: 120,
+                render: (_, record) => (
+                  <Space>
+                    <Button type="text" icon={<EditOutlined />} onClick={() => handleAgentTypeEdit(record)} />
+                    <Popconfirm
+                      title="ปิดใช้งานประเภทเอเจนต์"
+                      description="ต้องการปิดใช้งานรายการนี้ใช่หรือไม่?"
+                      okText="ยืนยัน"
+                      cancelText="ยกเลิก"
+                      onConfirm={() => handleAgentTypeDelete(record.id)}
+                    >
+                      <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  </Space>
+                )
+              }
+            ]}
+            dataSource={agentTypes}
+            loading={agentTypeLoading}
+            pagination={false}
+            scroll={{ x: 700 }}
+          />
+        </Card>
+      )
     }
   ];
 
@@ -550,6 +720,78 @@ const SettingsPage = () => {
               </Button>
               <Button type="primary" htmlType="submit">
                 {editingNotificationRule ? 'บันทึกการแก้ไข' : 'เพิ่มรายการ'}
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={editingAgentType ? 'แก้ไขประเภทเอเจนต์' : 'เพิ่มประเภทเอเจนต์'}
+        open={agentTypeModalVisible}
+        onCancel={() => {
+          setAgentTypeModalVisible(false);
+          setEditingAgentType(null);
+          agentTypeForm.resetFields();
+        }}
+        footer={null}
+        destroyOnHidden
+      >
+        <Form form={agentTypeForm} layout="vertical" onFinish={handleAgentTypeSubmit}>
+          <Form.Item
+            name="code"
+            label="Code"
+            rules={[{ required: true, message: 'กรุณากรอก code' }]}
+          >
+            <Input placeholder="เช่น sena_staff" />
+          </Form.Item>
+
+          <Form.Item
+            name="shortCode"
+            label="รหัสย่อ (Short Code)"
+            rules={[
+              { required: true, message: 'กรุณากรอกรหัสย่อ' },
+              { pattern: /^[A-Za-z]{2}$/, message: 'รหัสย่อต้องเป็นตัวอักษรภาษาอังกฤษ 2 ตัว' }
+            ]}
+            tooltip="ใช้สร้างรหัสเอเจนต์ เช่น ST → ST26A001"
+          >
+            <Input
+              placeholder="เช่น ST"
+              maxLength={2}
+              style={{ textTransform: 'uppercase' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="nameTh"
+            label="ชื่อประเภท (ภาษาไทย)"
+            rules={[{ required: true, message: 'กรุณากรอกชื่อประเภท' }]}
+          >
+            <Input placeholder="เช่น พนักงาน SENA" />
+          </Form.Item>
+
+          <Form.Item
+            name="sortOrder"
+            label="ลำดับการแสดงผล"
+          >
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item name="isActive" label="เปิดใช้งาน" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setAgentTypeModalVisible(false);
+                setEditingAgentType(null);
+                agentTypeForm.resetFields();
+              }}>
+                ยกเลิก
+              </Button>
+              <Button type="primary" htmlType="submit">
+                {editingAgentType ? 'บันทึกการแก้ไข' : 'เพิ่มรายการ'}
               </Button>
             </Space>
           </Form.Item>

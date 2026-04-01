@@ -9,6 +9,7 @@ services:
       MYSQL_DATABASE: sena_referral
       MYSQL_USER: sena_user
       MYSQL_PASSWORD: sena_password
+      MYSQL_AUTHENTICATION_PLUGIN: mysql_native_password
     ports:
       - "3306:3306"
     volumes:

@@ -8,10 +8,10 @@ import { useSelector, useDispatch } from 'react-redux';
 import { getCurrentUser } from './store/authSlice';
 
 // Import components
-import LoginPage from './pages/LoginPage';
-import AgentRegister from './pages/AgentRegister';
-import Dashboard from './pages/Dashboard';
-import AgentDashboard from './pages/AgentDashboard';
+import LoginPage from './pages/auth/LoginPage';
+import AgentRegister from './pages/auth/AgentRegister';
+import Dashboard from './pages/dashboards/Dashboard';
+import AgentDashboard from './pages/dashboards/AgentDashboard';
 import LoadingSpinner from './components/LoadingSpinner';
 
 // Protected Route component

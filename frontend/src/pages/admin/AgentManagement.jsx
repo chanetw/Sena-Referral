@@ -38,7 +38,7 @@ import {
   setFilters,
   setPagination,
   clearError
-} from '../store/agentsSlice';
+} from '../../store/agentsSlice';
 
 const { Title } = Typography;
 const { Option } = Select;

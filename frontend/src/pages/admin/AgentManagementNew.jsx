@@ -41,8 +41,8 @@ import {
   updateAgent,
   deleteAgent,
   setFilters
-} from '../store/agentsSlice';
-import { agentsAPI } from '../services/api';
+} from '../../store/agentsSlice';
+import { agentsAPI } from '../../services/api';
 
 const { Title } = Typography;
 
@@ -217,9 +217,6 @@ const AgentManagementNew = () => {
 
   // Handle agent detail modal
   const handleShowDetail = (agent, event) => {
-    console.log('handleShowDetail called with agent:', agent);
-    console.log('Event:', event);
-
     try {
       if (event) {
         event.preventDefault();
@@ -243,6 +240,31 @@ const AgentManagementNew = () => {
     setSelectedAgent(null);
   };
 
+  const formatThaiDate = (value) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const getAgentTypeDetailItems = (agent) => {
+    const typeDetail = agent?.typeDetail || {};
+    return [
+      { label: 'รหัสอ้างอิง/รหัสแนะนำจากแหล่งที่มา', value: typeDetail.referralCode },
+      { label: 'บ้านเลขที่', value: typeDetail.houseNumber },
+      { label: 'โครงการที่พักอาศัย', value: typeDetail.residenceProject?.projectName },
+      { label: 'หน่วยงาน', value: typeDetail.department },
+      { label: 'ฝ่าย/แผนก', value: typeDetail.division },
+      { label: 'ชื่อบริษัท', value: typeDetail.companyName },
+      { label: 'อาชีพ', value: typeDetail.occupation },
+      { label: 'รู้จัก SENA จาก', value: typeDetail.knowSenaFrom }
+    ].filter((item) => item.value !== null && item.value !== undefined && String(item.value).trim() !== '');
+  };
+
   const getStatusTag = (status) => {
     switch (status) {
       case 'active':
@@ -254,6 +276,260 @@ const AgentManagementNew = () => {
       default:
         return <Tag color="default">{status}</Tag>;
     }
+  };
+
+  const copyToClipboard = async (value, successMessage) => {
+    if (!value) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      notification.success({
+        message: successMessage,
+        duration: 1.5
+      });
+    } catch (error) {
+      notification.error({
+        message: 'คัดลอกไม่สำเร็จ',
+        duration: 1.5
+      });
+    }
+  };
+
+  const renderAgentDetailContent = (agent) => {
+    const agentName = [agent.firstName, agent.lastName].filter(Boolean).join(' ') || '-';
+    const initials = `${agent.firstName?.charAt(0) || ''}${agent.lastName?.charAt(0) || ''}`.toUpperCase() || 'AG';
+    const agentEmail = agent.User?.email || agent.email || '-';
+    const typeDetailItems = getAgentTypeDetailItems(agent);
+
+    const summaryCodeItems = [
+      {
+        label: 'รหัสเอเจนต์',
+        value: agent.agentCode || `#${agent.id || 'N/A'}`,
+        color: '#52c41a',
+        background: '#f6ffed',
+        border: '#b7eb8f',
+        copyMessage: 'คัดลอกรหัสเอเจนต์แล้ว'
+      },
+      {
+        label: 'รหัสแนะนำ',
+        value: agent.refCode || '-',
+        color: '#1677ff',
+        background: '#e6f4ff',
+        border: '#91caff',
+        copyMessage: 'คัดลอกรหัสแนะนำแล้ว'
+      }
+    ];
+
+    const primaryDetails = [
+      { label: 'อีเมล', value: agentEmail, icon: <MailOutlined style={{ color: '#1677ff' }} /> },
+      { label: 'เบอร์โทร', value: agent.phone || '-', icon: <PhoneOutlined style={{ color: '#13c2c2' }} /> },
+      { label: 'เลขประจำตัวประชาชน', value: agent.idCard || agent.agentIdCard || '-', icon: <IdcardOutlined style={{ color: '#722ed1' }} /> },
+      { label: 'วันที่ลงทะเบียน', value: formatThaiDate(agent.registrationDate), icon: <ClockCircleOutlined style={{ color: '#fa8c16' }} /> }
+    ];
+
+    return (
+      <div>
+        <div
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            marginBottom: '20px',
+            padding: '20px',
+            borderRadius: '18px',
+            background: 'linear-gradient(135deg, #f6ffed 0%, #f0f5ff 100%)',
+            border: '1px solid #d9f7be'
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              width: '160px',
+              height: '160px',
+              borderRadius: '50%',
+              background: 'rgba(22, 119, 255, 0.08)',
+              top: '-60px',
+              right: '-40px'
+            }}
+          />
+          <Row gutter={[20, 20]} align="middle" style={{ position: 'relative' }}>
+            <Col xs={24} md={13}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div
+                  style={{
+                    width: '68px',
+                    height: '68px',
+                    borderRadius: '20px',
+                    background: 'linear-gradient(135deg, #52c41a 0%, #1677ff 100%)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    fontWeight: 700,
+                    boxShadow: '0 10px 24px rgba(22, 119, 255, 0.18)'
+                  }}
+                >
+                  {initials}
+                </div>
+                <div>
+                  <Text style={{ color: '#8c8c8c', fontSize: '12px', letterSpacing: '0.08em' }}>
+                    AGENT PROFILE
+                  </Text>
+                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#1f1f1f', lineHeight: 1.2, marginTop: '4px' }}>
+                    {agentName}
+                  </div>
+                  <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {agent.status ? getStatusTag(agent.status) : <Tag>ไม่ระบุ</Tag>}
+                    {agent.agentType?.nameTh ? <Tag color="geekblue">{agent.agentType.nameTh}</Tag> : null}
+                  </div>
+                </div>
+              </div>
+            </Col>
+            <Col xs={24} md={11}>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {summaryCodeItems.map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '14px',
+                      background: item.background,
+                      border: `1px solid ${item.border}`
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>{item.label}</div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: item.color, letterSpacing: '0.04em' }}>
+                        {item.value}
+                      </div>
+                    </div>
+                    {item.value !== '-' ? (
+                      <Tooltip title="คัดลอก">
+                        <Button
+                          type="text"
+                          icon={<CopyOutlined />}
+                          onClick={() => copyToClipboard(item.value, item.copyMessage)}
+                          style={{ color: item.color }}
+                        />
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </Col>
+          </Row>
+        </div>
+
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={12}>
+            <Card
+              size="small"
+              title={<Text strong style={{ fontSize: '15px' }}>ข้อมูลติดต่อและตัวตน</Text>}
+              style={{ borderRadius: '16px', boxShadow: '0 6px 18px rgba(0,0,0,0.04)' }}
+            >
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {primaryDetails.map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '12px',
+                      background: '#fafafa'
+                    }}
+                  >
+                    <div style={{ fontSize: '16px', lineHeight: 1.2, marginTop: '2px' }}>{item.icon}</div>
+                    <div>
+                      <Text style={{ display: 'block', color: '#8c8c8c', fontSize: '12px' }}>{item.label}</Text>
+                      <Text strong style={{ fontSize: '15px', color: '#262626', wordBreak: 'break-word' }}>{item.value}</Text>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Col>
+          <Col xs={24} md={12}>
+            <Card
+              size="small"
+              title={<Text strong style={{ fontSize: '15px' }}>ประเภทเอเจนต์</Text>}
+              style={{ borderRadius: '16px', boxShadow: '0 6px 18px rgba(0,0,0,0.04)', height: '100%' }}
+            >
+              {agent.agentType?.nameTh ? (
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #f0f5ff 0%, #f9f0ff 100%)',
+                    border: '1px solid #d6e4ff'
+                  }}
+                >
+                  <Text style={{ display: 'block', color: '#8c8c8c', fontSize: '12px' }}>ประเภทที่เลือก</Text>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#1d39c4', marginTop: '4px' }}>
+                    {agent.agentType.nameTh}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '14px 16px', borderRadius: '14px', background: '#fafafa' }}>
+                  <Text type="secondary">-</Text>
+                </div>
+              )}
+            </Card>
+          </Col>
+          <Col xs={24}>
+            <Card
+              size="small"
+              title={<Text strong style={{ fontSize: '15px' }}>รายละเอียดตามประเภทเอเจนต์</Text>}
+              style={{ borderRadius: '16px', boxShadow: '0 6px 18px rgba(0,0,0,0.04)' }}
+            >
+              {typeDetailItems.length > 0 ? (
+                <Row gutter={[12, 12]}>
+                  {typeDetailItems.map((item) => (
+                    <Col xs={24} md={12} key={item.label}>
+                      <div
+                        style={{
+                          height: '100%',
+                          padding: '12px 14px',
+                          borderRadius: '14px',
+                          border: '1px solid #f0f0f0',
+                          background: '#fff'
+                        }}
+                      >
+                        <Text style={{ display: 'block', color: '#8c8c8c', fontSize: '12px', marginBottom: '6px' }}>
+                          {item.label}
+                        </Text>
+                        <Text strong style={{ fontSize: '15px', color: '#262626', wordBreak: 'break-word' }}>
+                          {item.value}
+                        </Text>
+                      </div>
+                    </Col>
+                  ))}
+                </Row>
+              ) : (
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    borderRadius: '14px',
+                    background: '#fafafa',
+                    color: '#8c8c8c'
+                  }}
+                >
+                  ยังไม่มีรายละเอียดเพิ่มเติมสำหรับประเภทเอเจนต์นี้
+                </div>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      </div>
+    );
   };
 
   const columns = [
@@ -488,7 +764,7 @@ const AgentManagementNew = () => {
         <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
           <Col xs={24} sm={12} md={8}>
             <Input.Search
-              placeholder="ค้นหาเอเจนต์ด้วยชื่อหรือรหัส..."
+              placeholder="ค้นหาด้วยชื่อ, รหัสเอเจนต์, เบอร์โทร, หรือเลขบัตรประชาชน"
               allowClear
               enterButton={<SearchOutlined />}
               onSearch={handleSearch}
@@ -699,90 +975,12 @@ const AgentManagementNew = () => {
             ปิด
           </Button>
         ]}
-        width={600}
-        styles={{ body: { padding: '24px' } }}
+        width={760}
+        styles={{ body: { padding: '20px' } }}
         destroyOnClose={true}
       >
         {selectedAgent ? (
-          <div>
-            <Row gutter={16}>
-              <Col span={12}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text strong>รหัสเอเจนต์:</Text>
-                  <br />
-                  <Text style={{ fontSize: '16px' }}>
-                    {selectedAgent.agentCode || `#${selectedAgent.id || 'N/A'}`}
-                  </Text>
-                </div>
-              </Col>
-              <Col span={12}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text strong>สถานะ:</Text>
-                  <br />
-                  {selectedAgent.status ? getStatusTag(selectedAgent.status) : <Text>ไม่ระบุ</Text>}
-                </div>
-              </Col>
-            </Row>
-
-            <Row gutter={16}>
-              <Col span={12}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text strong>ชื่อ:</Text>
-                  <br />
-                  <Text style={{ fontSize: '16px' }}>{selectedAgent.firstName}</Text>
-                </div>
-              </Col>
-              <Col span={12}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text strong>นามสกุล:</Text>
-                  <br />
-                  <Text style={{ fontSize: '16px' }}>{selectedAgent.lastName}</Text>
-                </div>
-              </Col>
-            </Row>
-
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>อีเมล:</Text>
-              <br />
-              <Text style={{ fontSize: '16px' }}>{selectedAgent.email}</Text>
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>เบอร์โทร:</Text>
-              <br />
-              <Text style={{ fontSize: '16px' }}>{selectedAgent.phone || '-'}</Text>
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>วันที่ลงทะเบียน:</Text>
-              <br />
-              <Text style={{ fontSize: '16px' }}>
-                {selectedAgent.registrationDate ?
-                  new Date(selectedAgent.registrationDate).toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  }) : 'Invalid Date'
-                }
-              </Text>
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>เลขประจำตัวประชาชน:</Text>
-              <br />
-              <Text style={{ fontSize: '16px' }}>{selectedAgent.idCard || '-'}</Text>
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>ข้อมูลโครงการ:</Text>
-              <br />
-              <Text style={{ fontSize: '16px' }}>-</Text>
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <Text strong>ข้อมูล:</Text>
-            </div>
-          </div>
+          renderAgentDetailContent(selectedAgent)
         ) : (
           <div style={{ textAlign: 'center', padding: '40px' }}>
             <Text type="secondary">กำลังโหลดข้อมูล...</Text>

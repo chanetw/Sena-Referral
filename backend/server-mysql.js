@@ -108,7 +108,7 @@ const getCustomerInclude = () => ([
   {
     model: Project,
     as: 'project',
-    attributes: ['id', 'projectName'],
+    attributes: ['id', 'projectName', 'passEmailEnabled', 'passEmailRecipients'],
     required: false
   },
   {
@@ -695,6 +695,7 @@ const formatAgentType = (agentType) => {
   return {
     id: agentType.id,
     code: agentType.code,
+    shortCode: agentType.shortCode,
     nameTh: agentType.nameTh
   };
 };
@@ -784,23 +785,48 @@ const validateActivationRequest = (payload) => {
   return null;
 };
 
-const getNextAgentCode = async (transaction) => {
+const getNextAgentCode = async (agentTypeId, transaction) => {
+  // 1. Get short_code from agent_types
+  const agentType = await AgentType.findByPk(agentTypeId, {
+    attributes: ['shortCode'],
+    transaction
+  });
+  const shortCode = agentType?.shortCode || 'GN';
+
+  // 2. Build prefix: {TYPE}{YY} e.g. "ST26"
+  const yearStr = String(new Date().getFullYear()).slice(-2); // ค.ศ. 2 หลัก
+  const prefix = `${shortCode}${yearStr}`;
+
+  // 3. Find last agent_code matching this prefix
+  const { Op } = require('sequelize');
   const lastAgent = await Agent.findOne({
+    where: { agentCode: { [Op.like]: `${prefix}%` } },
     order: [['agentCode', 'DESC']],
     attributes: ['agentCode'],
     transaction,
     lock: transaction ? transaction.LOCK.UPDATE : undefined
   });
 
-  let nextNumber = 1;
+  // 4. Parse & increment: ST26A001 → alpha='A', num=1
+  let alpha = 'A';
+  let num = 1;
+
   if (lastAgent && lastAgent.agentCode) {
-    const lastNumber = parseInt(lastAgent.agentCode.replace('AG', ''), 10);
-    if (!Number.isNaN(lastNumber)) {
-      nextNumber = lastNumber + 1;
+    const suffix = lastAgent.agentCode.slice(prefix.length); // e.g. "A001"
+    const lastAlpha = suffix.charAt(0);
+    const lastNum = parseInt(suffix.slice(1), 10);
+
+    if (!Number.isNaN(lastNum) && lastNum < 999) {
+      alpha = lastAlpha;
+      num = lastNum + 1;
+    } else {
+      // 999 reached → next alpha letter
+      alpha = String.fromCharCode(lastAlpha.charCodeAt(0) + 1);
+      num = 1;
     }
   }
 
-  return `AG${nextNumber.toString().padStart(3, '0')}`;
+  return `${prefix}${alpha}${String(num).padStart(3, '0')}`;
 };
 
 const buildExistingAgentData = (agent) => ({
@@ -823,10 +849,11 @@ const buildExistingCustomerData = (customer) => ({
   status: customer?.status || null
 });
 
-const detectCustomerDuplicateReasons = async ({ idCard, firstName, lastName, transaction }) => {
+const detectCustomerDuplicateReasons = async ({ idCard, transaction }) => {
   const reasons = [];
 
   if (idCard) {
+    // ตรวจซ้ำกับ customers table เท่านั้น โดยใช้เลขบัตรเป็นหลัก
     const existingIdCard = await Customer.findOne({
       where: { idCard },
       order: [['id', 'DESC']],
@@ -838,22 +865,6 @@ const detectCustomerDuplicateReasons = async ({ idCard, firstName, lastName, tra
         type: 'idCard',
         message: 'เลขบัตรประชาชนซ้ำกับข้อมูลลูกค้าที่มีอยู่ในระบบ',
         existingData: buildExistingCustomerData(existingIdCard)
-      });
-    }
-  }
-
-  if (firstName && lastName) {
-    const existingFullName = await Customer.findOne({
-      where: { firstName, lastName },
-      order: [['id', 'DESC']],
-      transaction
-    });
-
-    if (existingFullName) {
-      reasons.push({
-        type: 'fullName',
-        message: 'ชื่อ-นามสกุลซ้ำกับข้อมูลลูกค้าที่มีอยู่ในระบบ',
-        existingData: buildExistingCustomerData(existingFullName)
       });
     }
   }
@@ -1156,16 +1167,8 @@ app.post('/api/auth/register-agent', async (req, res) => {
       });
     }
 
-    // Generate new agent code
-    const existingAgents = await Agent.findAll({ order: [['agentCode', 'DESC']] });
-    const existingCodes = existingAgents.map(a => a.agentCode);
-    let newAgentCode;
-    let codeNumber = 1;
-
-    do {
-      newAgentCode = `AG${String(codeNumber).padStart(3, '0')}`;
-      codeNumber++;
-    } while (existingCodes.includes(newAgentCode));
+    // Generate new agent code using type-year format
+    const newAgentCode = await getNextAgentCode(agentType.id);
 
     // Create user first
     const newUser = await User.create({
@@ -1401,16 +1404,8 @@ app.post('/api/auth/register', registerApiLimiter, checkRegisterApiKey, async (r
       });
     }
 
-    // Generate new agent code
-    const existingAgents = await Agent.findAll({ order: [['agentCode', 'DESC']] });
-    const existingCodes = existingAgents.map(a => a.agentCode);
-    let newAgentCode;
-    let codeNumber = 1;
-
-    do {
-      newAgentCode = `AG${String(codeNumber).padStart(3, '0')}`;
-      codeNumber++;
-    } while (existingCodes.includes(newAgentCode));
+    // Generate new agent code using type-year format
+    const newAgentCode = await getNextAgentCode(agentType.id);
 
     // Create user with isActive = true (activated immediately)
     const newUser = await User.create({
@@ -1610,7 +1605,7 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
         isActive: true
       }, { transaction });
 
-      const agentCode = await getNextAgentCode(transaction);
+      const agentCode = await getNextAgentCode(agentType.id, transaction);
 
       return Agent.create({
         userId: user.id,
@@ -1681,9 +1676,12 @@ app.post('/api/auth/activate-registration', activationLimiter, async (req, res) 
 // GET /api/agent-types - Get active agent types for dropdowns
 app.get('/api/agent-types', async (req, res) => {
   try {
+    const includeAll = req.query.all === 'true';
+    const whereCondition = includeAll ? {} : { isActive: true };
+
     const agentTypes = await AgentType.findAll({
-      where: { isActive: true },
-      attributes: ['id', 'code', 'nameTh', 'sortOrder'],
+      where: whereCondition,
+      attributes: ['id', 'code', 'shortCode', 'nameTh', 'isActive', 'sortOrder'],
       order: [['sortOrder', 'ASC'], ['id', 'ASC']]
     });
 
@@ -1693,7 +1691,9 @@ app.get('/api/agent-types', async (req, res) => {
       data: agentTypes.map((agentType) => ({
         id: agentType.id,
         code: agentType.code,
+        shortCode: agentType.shortCode,
         nameTh: agentType.nameTh,
+        isActive: agentType.isActive,
         sortOrder: agentType.sortOrder
       }))
     });
@@ -1703,6 +1703,153 @@ app.get('/api/agent-types', async (req, res) => {
       success: false,
       message: 'เกิดข้อผิดพลาดในการดึงประเภทเอเจนต์'
     });
+  }
+});
+
+// POST /api/agent-types - Create new agent type (admin only)
+app.post('/api/agent-types', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ใช้งาน' });
+    }
+
+    const { code, shortCode, nameTh, isActive = true, sortOrder = 0 } = req.body;
+
+    if (!code || !shortCode || !nameTh) {
+      return res.status(400).json({
+        success: false,
+        message: 'กรุณากรอก code, shortCode และ nameTh ให้ครบ'
+      });
+    }
+
+    if (!/^[A-Z]{2}$/.test(shortCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'shortCode ต้องเป็นตัวอักษรภาษาอังกฤษพิมพ์ใหญ่ 2 ตัว (A-Z)'
+      });
+    }
+
+    const existing = await AgentType.findOne({
+      where: { [require('sequelize').Op.or]: [{ code }, { shortCode }] }
+    });
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: existing.code === code ? 'code นี้มีอยู่แล้ว' : 'shortCode นี้มีอยู่แล้ว'
+      });
+    }
+
+    const agentType = await AgentType.create({
+      code: code.toLowerCase(),
+      shortCode: shortCode.toUpperCase(),
+      nameTh,
+      isActive: Boolean(isActive),
+      sortOrder: Number(sortOrder) || 0
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'สร้างประเภทเอเจนต์สำเร็จ',
+      data: {
+        id: agentType.id,
+        code: agentType.code,
+        shortCode: agentType.shortCode,
+        nameTh: agentType.nameTh,
+        isActive: agentType.isActive,
+        sortOrder: agentType.sortOrder
+      }
+    });
+  } catch (error) {
+    console.error('Create agent type error:', error);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการสร้างประเภทเอเจนต์' });
+  }
+});
+
+// PUT /api/agent-types/:id - Update agent type (admin only)
+app.put('/api/agent-types/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ใช้งาน' });
+    }
+
+    const agentType = await AgentType.findByPk(req.params.id);
+    if (!agentType) {
+      return res.status(404).json({ success: false, message: 'ไม่พบประเภทเอเจนต์' });
+    }
+
+    const { code, shortCode, nameTh, isActive, sortOrder } = req.body;
+    const payload = {};
+
+    if (code !== undefined) payload.code = code.toLowerCase();
+    if (nameTh !== undefined) payload.nameTh = nameTh;
+    if (isActive !== undefined) payload.isActive = Boolean(isActive);
+    if (sortOrder !== undefined) payload.sortOrder = Number(sortOrder) || 0;
+
+    if (shortCode !== undefined) {
+      if (!/^[A-Z]{2}$/.test(shortCode.toUpperCase())) {
+        return res.status(400).json({
+          success: false,
+          message: 'shortCode ต้องเป็นตัวอักษรภาษาอังกฤษพิมพ์ใหญ่ 2 ตัว (A-Z)'
+        });
+      }
+      // Check uniqueness
+      const existing = await AgentType.findOne({
+        where: { shortCode: shortCode.toUpperCase(), id: { [require('sequelize').Op.ne]: agentType.id } }
+      });
+      if (existing) {
+        return res.status(409).json({ success: false, message: 'shortCode นี้มีอยู่แล้ว' });
+      }
+      payload.shortCode = shortCode.toUpperCase();
+    }
+
+    await agentType.update(payload);
+
+    res.json({
+      success: true,
+      message: 'อัพเดตประเภทเอเจนต์สำเร็จ',
+      data: {
+        id: agentType.id,
+        code: agentType.code,
+        shortCode: agentType.shortCode,
+        nameTh: agentType.nameTh,
+        isActive: agentType.isActive,
+        sortOrder: agentType.sortOrder
+      }
+    });
+  } catch (error) {
+    console.error('Update agent type error:', error);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการอัพเดตประเภทเอเจนต์' });
+  }
+});
+
+// DELETE /api/agent-types/:id - Soft-delete agent type (admin only)
+app.delete('/api/agent-types/:id', checkAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ใช้งาน' });
+    }
+
+    const agentType = await AgentType.findByPk(req.params.id);
+    if (!agentType) {
+      return res.status(404).json({ success: false, message: 'ไม่พบประเภทเอเจนต์' });
+    }
+
+    // Check if any agents use this type
+    const agentCount = await Agent.count({ where: { agentTypeId: agentType.id } });
+    if (agentCount > 0) {
+      // Soft-delete: just deactivate
+      await agentType.update({ isActive: false });
+      return res.json({
+        success: true,
+        message: `ปิดใช้งานประเภทเอเจนต์แล้ว (มีเอเจนต์ ${agentCount} คนที่ใช้ประเภทนี้ จึงไม่สามารถลบได้)`
+      });
+    }
+
+    await agentType.destroy();
+    res.json({ success: true, message: 'ลบประเภทเอเจนต์สำเร็จ' });
+  } catch (error) {
+    console.error('Delete agent type error:', error);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการลบประเภทเอเจนต์' });
   }
 });
 
@@ -1720,13 +1867,16 @@ app.get('/api/agents', checkAuth, async (req, res) => {
       whereCondition.status = status;
     }
 
-    // Search by name or agent code
+    // Search by name, agent code, phone, id card, or email
     if (search) {
       const { Op } = require('sequelize');
       whereCondition[Op.or] = [
         { firstName: { [Op.like]: `%${search}%` } },
         { lastName: { [Op.like]: `%${search}%` } },
-        { agentCode: { [Op.like]: `%${search}%` } }
+        { agentCode: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
+        { idCard: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } }
       ];
     }
 
@@ -1743,7 +1893,7 @@ app.get('/api/agents', checkAuth, async (req, res) => {
         {
           model: AgentType,
           as: 'agentType',
-          attributes: ['id', 'code', 'nameTh'],
+          attributes: ['id', 'code', 'shortCode', 'nameTh'],
           required: false
         },
         {
@@ -1821,27 +1971,24 @@ app.get('/api/agents/list', checkAuth, async (req, res) => {
 // GET /api/agents/next-code - Get next available agent code (public endpoint for registration)
 app.get('/api/agents/next-code', async (req, res) => {
   try {
-    // Get the latest agent code
-    const latestAgent = await Agent.findOne({
-      order: [['agentCode', 'DESC']],
-      attributes: ['agentCode']
-    });
+    const { agentTypeCode } = req.query;
 
-    let nextCode = 'AG001'; // Default first code
+    // Resolve agent type
+    const resolvedCode = resolveAgentTypeCode(agentTypeCode || 'general');
+    const agentType = await getAgentTypeByCode(resolvedCode) || await getDefaultAgentType();
 
-    if (latestAgent && latestAgent.agentCode) {
-      // Extract number from agent code (e.g., AG007 -> 7)
-      const currentNumber = parseInt(latestAgent.agentCode.replace('AG', ''), 10);
-      const nextNumber = currentNumber + 1;
-
-      // Format next code with leading zeros (e.g., 8 -> AG008)
-      nextCode = `AG${nextNumber.toString().padStart(3, '0')}`;
+    if (!agentType) {
+      return res.status(400).json({ success: false, message: 'ไม่พบประเภทเอเจนต์' });
     }
+
+    const nextCode = await getNextAgentCode(agentType.id);
 
     res.json({
       success: true,
       data: {
-        nextAgentCode: nextCode
+        nextAgentCode: nextCode,
+        agentTypeCode: agentType.code,
+        shortCode: agentType.shortCode
       }
     });
   } catch (error) {
@@ -1920,7 +2067,7 @@ app.get('/api/agents/:id', checkAuth, async (req, res) => {
         {
           model: AgentType,
           as: 'agentType',
-          attributes: ['id', 'code', 'nameTh'],
+          attributes: ['id', 'code', 'shortCode', 'nameTh'],
           required: false
         },
         {
@@ -2377,13 +2524,15 @@ app.get('/api/customers', checkAuth, async (req, res) => {
       whereCondition.agentId = agentId;
     }
 
-    // Search by name, phone, or email
+    // Search by name, code, phone, id card, or email
     if (search) {
       const { Op } = require('sequelize');
       whereCondition[Op.or] = [
+        { customerCode: { [Op.like]: `%${search}%` } },
         { firstName: { [Op.like]: `%${search}%` } },
         { lastName: { [Op.like]: `%${search}%` } },
         { phone: { [Op.like]: `%${search}%` } },
+        { idCard: { [Op.like]: `%${search}%` } },
         { email: { [Op.like]: `%${search}%` } }
       ];
     }
@@ -3017,9 +3166,7 @@ app.post('/api/customers', checkAuth, async (req, res) => {
 
     const duplicateReasons = isAgentCreator
       ? await detectCustomerDuplicateReasons({
-        idCard: normalizedIdCard,
-        firstName: normalizedFirstName,
-        lastName: normalizedLastName
+        idCard: normalizedIdCard
       })
       : [];
 

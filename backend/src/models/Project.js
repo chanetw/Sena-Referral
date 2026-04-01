@@ -60,6 +60,16 @@ const Project = sequelize.define('Project', {
     defaultValue: true,
     field: 'is_active'
   },
+  passEmailEnabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'pass_email_enabled'
+  },
+  passEmailRecipients: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'pass_email_recipients'
+  },
   launchDate: {
     type: DataTypes.DATEONLY,
     field: 'launch_date'

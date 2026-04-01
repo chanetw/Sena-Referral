@@ -1,7 +1,7 @@
 import { Form, Input, Button, Card, Row, Col, Alert, Typography } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { loginUser, clearError } from '../store/authSlice';
+import { loginUser, clearError } from '../../store/authSlice';
 
 const { Title, Text } = Typography;
 
@@ -18,7 +18,7 @@ const LoginPage = () => {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundImage: 'url(/background.jpg)',
+      backgroundImage: 'url(/assets/background.jpg)',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',

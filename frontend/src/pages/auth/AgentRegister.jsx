@@ -26,7 +26,7 @@ import {
   ExclamationCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
-import { authAPI, agentsAPI } from '../services/api';
+import { authAPI, agentsAPI } from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -156,7 +156,7 @@ const AgentRegister = () => {
     return (
       <div style={{
         minHeight: '100vh',
-        backgroundImage: 'url(/background.jpg)',
+        backgroundImage: 'url(/assets/background.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -273,7 +273,7 @@ const AgentRegister = () => {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundImage: 'url(/background.jpg)',
+      backgroundImage: 'url(/assets/background.jpg)',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',

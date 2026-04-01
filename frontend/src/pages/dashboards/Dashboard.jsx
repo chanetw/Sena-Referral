@@ -33,17 +33,17 @@ import {
   PlusOutlined
 } from '@ant-design/icons';
 import { useDispatch, useSelector } from 'react-redux';
-import { logoutUser } from '../store/authSlice';
-import { dashboardAPI } from '../services/api';
-import AgentManagementNew from './AgentManagementNew';
-import CustomerManagement from './CustomerManagement';
-import ProjectManagement from './ProjectManagement';
-import ReportsPage from './ReportsPage';
-import SettingsPage from './SettingsPage';
-import StatisticsBarChart from '../components/charts/StatisticsBarChart';
-import CustomerStatusPieChart from '../components/charts/CustomerStatusPieChart';
-import TrendLineChart from '../components/charts/TrendLineChart';
-import PerformanceAreaChart from '../components/charts/PerformanceAreaChart';
+import { logoutUser } from '../../store/authSlice';
+import { dashboardAPI } from '../../services/api';
+import AgentManagementNew from '../admin/AgentManagementNew';
+import CustomerManagement from '../admin/CustomerManagement';
+import ProjectManagement from '../projects/ProjectManagement';
+import ReportsPage from '../reports/ReportsPage';
+import SettingsPage from '../settings/SettingsPage';
+import StatisticsBarChart from '../../components/charts/StatisticsBarChart';
+import CustomerStatusPieChart from '../../components/charts/CustomerStatusPieChart';
+import TrendLineChart from '../../components/charts/TrendLineChart';
+import PerformanceAreaChart from '../../components/charts/PerformanceAreaChart';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
