@@ -35,14 +35,15 @@ fi
 
 # สร้าง/ใช้ buildx builder ที่รองรับ multi-platform
 BUILDER="sena-builder"
-if ! docker buildx ls | grep -q "${BUILDER}"; then
+if docker buildx inspect "${BUILDER}" >/dev/null 2>&1; then
+  echo "📦  ใช้ buildx builder เดิม: ${BUILDER}"
+else
   echo ""
   echo "📦  สร้าง buildx builder: ${BUILDER}"
-  docker buildx create --name "${BUILDER}" --driver docker-container --bootstrap
-else
-  echo "📦  ใช้ buildx builder เดิม: ${BUILDER}"
+  docker buildx create --name "${BUILDER}" --driver docker-container --use >/dev/null
 fi
 docker buildx use "${BUILDER}"
+docker buildx inspect "${BUILDER}" --bootstrap >/dev/null
 
 # ─── Build & Push API ────────────────────────────────────────
 echo ""
