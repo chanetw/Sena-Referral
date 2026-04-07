@@ -1,13 +1,18 @@
 # =============================================================
 #  docker-compose.prod.yml
-#  ใช้บน Production Server (172.22.22.11)
-#  Pull images จาก Docker Hub โดยตรง — ไม่ต้อง build
+#  Production compose (อัปเดต 2026-04-07)
+#  ใช้สำหรับ deploy บน server จริงโดย pull image จาก Docker Hub
+#
+#  Quick start:
+#    docker compose -f docker-compose.prod.yml pull
+#    docker compose -f docker-compose.prod.yml up -d
 # =============================================================
 
 services:
   # MySQL Database
   mysql:
     image: mysql:8.0
+    pull_policy: always
     container_name: sena_mysql
     restart: unless-stopped
     environment:
@@ -33,6 +38,7 @@ services:
   # Backend API — pull จาก Docker Hub
   api:
     image: chanetw/sena-api:latest
+    pull_policy: always
     container_name: sena_api
     restart: unless-stopped
     env_file:
@@ -48,10 +54,12 @@ services:
   # Frontend Web App — pull จาก Docker Hub
   web:
     image: chanetw/sena-web:latest
+    pull_policy: always
     container_name: sena_web
     restart: unless-stopped
     env_file:
       - ./frontend/.env.prod
+    # หมายเหตุ: ถ้าเปลี่ยน VITE_API_BASE ต้อง rebuild web image ใหม่ก่อน deploy
     depends_on:
       - api
     ports:
@@ -62,6 +70,7 @@ services:
   # phpMyAdmin — Database Management
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
+    pull_policy: always
     container_name: sena_phpmyadmin
     restart: unless-stopped
     environment:

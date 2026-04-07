@@ -1,5 +1,22 @@
 # DEPLOY-EXTERNAL-DB.md — คู่มือ Deploy แยก Database ออกจาก Docker
 
+> อัปเดตล่าสุด: 7 เมษายน 2026  
+> ถ้าต้องการ deploy แบบมี MySQL อยู่ใน compose เดียวกัน ให้ดู `docs/guides/DEPLOY-PRODUCTION-2026.md`
+
+## Quick Start (2026)
+
+ถ้า server มี MySQL / Managed DB อยู่แล้ว และต้องการรันเฉพาะ `api` + `web`:
+
+```bash
+docker compose -f docker-compose.extdb.yml pull
+docker compose -f docker-compose.extdb.yml up -d
+```
+
+ไฟล์ที่ต้องตรวจให้ถูกก่อนรัน:
+- `backend/.env.extdb`
+- `frontend/.env.prod`
+- `docker-compose.extdb.yml`
+
 ## สารบัญ
 - [ภาพรวม Architecture](#ภาพรวม-architecture)
 - [Prerequisites](#prerequisites)
@@ -38,12 +55,14 @@
 
 **เปรียบเทียบกับ mode เดิม:**
 
-| | docker-compose.prod.yml (เดิม) | docker-compose.extdb.yml (ใหม่) |
+| | `docker-compose.prod.yml` | `docker-compose.extdb.yml` |
 |---|---|---|
-| MySQL | อยู่ใน Docker container | DevOps สร้างเอง (host หรือ managed) |
-| api | depends_on mysql container | เชื่อมต่อผ่าน DB_HOST env var |
+| MySQL | อยู่ใน Docker container | ใช้ DB ภายนอก / managed DB |
+| api | depends_on mysql container | เชื่อมต่อผ่าน `DB_HOST` ใน env |
 | web | เหมือนกัน | เหมือนกัน |
-| phpMyAdmin | รวมอยู่ | ไม่รวม (DevOps จัดการ DB tool เอง) |
+| phpMyAdmin | รวมอยู่ | ไม่รวม (DevOps จัดการเอง) |
+
+> สรุป: ถ้ามีฐานข้อมูลอยู่แล้ว ให้ใช้ `docker-compose.extdb.yml` แต่ถ้าต้องการรันครบทั้ง stack ในเครื่องเดียว ให้ใช้ `docker-compose.prod.yml`
 
 ---
 
