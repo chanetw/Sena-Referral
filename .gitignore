@@ -123,7 +123,6 @@ databaseset.md
 sqlguide.md
 *backup*.sql
 .DS_Store
-README.md
 
 # Server deployment checklist (contains sensitive server info)
 server-todo.md
@@ -145,12 +144,23 @@ USER_GUIDE.md
 # Local and deployment environment files
 frontend/.env.production
 backend/.env
+backend/.env.local
+backend/.env.prod
+backend/.env.extdb
+
+# Local build/deploy environment files
+frontend/.env.local
 
 # Sensitive operational and migration notes
 CLAUDE.md
 MIGRATION_REPORT.md
 QA-TEST-PLAN.md
 test-results/
+
+# Local backups and large archives
+backups/*.sql
+backups/*.sql.gz
+archives/*.bundle
 
 # Local Docker overrides
 docker-compose.override.yml
@@ -162,3 +172,11 @@ __pycache__/
 
 # Excel temporary lock files
 docs/~$*.xlsx
+
+# Local exported documents (not source-of-truth)
+docs/*.docx
+
+# Local scripts with temporary credentials/integration testing
+backend/match-icon-projects.js
+scripts/fetch-icon-projects.js
+scripts/match-icon-projects.js
