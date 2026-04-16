@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SENA Referral System - Swimlane Overview</title>
+<style>
+:root {
+  --bg-0: #f4f7fb;
+  --bg-1: #eef4ff;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-strong: #ffffff;
+  --border: rgba(15, 23, 42, 0.08);
+  --text: #0f172a;
+  --muted: #5b6478;
+  --accent: #2156f5;
+  --accent-2: #0f9b8e;
+  --accent-3: #f97316;
+  --accent-4: #7c3aed;
+  --success: #0f9b8e;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --shadow: 0 18px 50px rgba(16, 24, 40, 0.08);
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(33, 86, 245, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(124, 58, 237, 0.10), transparent 28%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 28%, #ffffff 100%);
+  font-family: Inter, "Segoe UI", Tahoma, Arial, sans-serif;
+}
+
+.shell {
+  max-width: 1540px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+  gap: 20px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.72));
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(33, 86, 245, 0.12);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 14px 0 12px;
+  font-size: clamp(30px, 4vw, 54px);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.7;
+  max-width: 70ch;
+}
+
+.hero-copy {
+  display: grid;
+  gap: 18px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: #182033;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chip.primary {
+  background: rgba(33, 86, 245, 0.12);
+  color: var(--accent);
+  border-color: rgba(33, 86, 245, 0.18);
+}
+
+.chip.success {
+  background: rgba(15, 155, 142, 0.12);
+  color: var(--success);
+  border-color: rgba(15, 155, 142, 0.18);
+}
+
+.chip.warning {
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--accent-3);
+  border-color: rgba(249, 115, 22, 0.16);
+}
+
+.chip.purple {
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--accent-4);
+  border-color: rgba(124, 58, 237, 0.16);
+}
+
+.hero-side {
+  display: grid;
+  gap: 12px;
+}
+
+.info-card {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 248, 255, 0.88));
+  box-shadow: 0 12px 36px rgba(16, 24, 40, 0.06);
+}
+
+.info-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+
+.info-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.grid-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.metric {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.05);
+}
+
+.metric .label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.metric .value {
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.metric .desc {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.section {
+  margin-top: 26px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.section-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 78ch;
+}
+
+.journey-track {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.step-card {
+  position: relative;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 246, 255, 0.9));
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.05);
+  min-height: 172px;
+}
+
+.step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(33, 86, 245, 0.12);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.step-card h3 {
+  margin: 12px 0 8px;
+  font-size: 16px;
+}
+
+.step-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.step-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.step-tags span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.matrix {
+  display: grid;
+  gap: 12px;
+}
+
+.matrix-head,
+.matrix-row {
+  display: grid;
+  grid-template-columns: 190px repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.matrix-head {
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+}
+
+.matrix-head div {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.matrix-row {
+  align-items: stretch;
+}
+
+.row-label {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(33, 86, 245, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 255, 0.9));
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.row-label::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  border-radius: 999px;
+  background: var(--lane-accent, var(--accent));
+}
+
+.row-label .title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.row-label .subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cell {
+  padding: 16px 16px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.92));
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.05);
+  min-height: 166px;
+}
+
+.cell::before {
+  content: attr(data-label);
+  display: inline-flex;
+  margin-bottom: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cell h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.cell p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.field-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.field-tags span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(33, 86, 245, 0.08);
+  color: #1e3a8a;
+}
+
+.workflow-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.workflow-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.04);
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.workflow-pill .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pill-color, #94a3b8);
+}
+
+.workflow-pill.role-admin { --pill-color: #0f766e; }
+.workflow-pill.role-backend { --pill-color: #2156f5; }
+.workflow-pill.role-db { --pill-color: #7c3aed; }
+.workflow-pill.role-icon { --pill-color: #f97316; }
+.workflow-pill.role-ops { --pill-color: #dc2626; }
+.workflow-pill.type-action { --pill-color: #60a5fa; }
+.workflow-pill.type-sync { --pill-color: #34d399; }
+.workflow-pill.type-result { --pill-color: #c4b5fd; }
+.workflow-pill.type-exception { --pill-color: #fda4af; }
+
+.workflow-board {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 247, 255, 0.94));
+  box-shadow: 0 18px 42px rgba(16, 24, 40, 0.08);
+  overflow: auto;
+}
+
+.workflow-phase-header,
+.workflow-lane {
+  min-width: 1500px;
+  display: grid;
+  grid-template-columns: 210px repeat(6, minmax(185px, 1fr));
+}
+
+.workflow-phase-header {
+  position: sticky;
+  top: 10px;
+  z-index: 3;
+  background: linear-gradient(180deg, #eef3fb, #e8eef8);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.workflow-phase-header div {
+  padding: 14px 10px;
+  border-right: 1px solid rgba(15, 23, 42, 0.06);
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+  text-align: center;
+}
+
+.workflow-phase-header div:first-child {
+  text-align: left;
+  padding-left: 16px;
+}
+
+.workflow-lane {
+  border-bottom: 1px dashed rgba(15, 23, 42, 0.08);
+}
+
+.workflow-lane:last-child {
+  border-bottom: 0;
+}
+
+.workflow-lane-name {
+  padding: 18px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 255, 0.92));
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.workflow-lane-name::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  border-radius: 999px;
+  background: var(--lane-accent, var(--accent));
+}
+
+.workflow-lane-name strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.workflow-lane-name span {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.58;
+}
+
+.workflow-cells {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(185px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  align-items: start;
+}
+
+.workflow-node {
+  position: relative;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 16px;
+  padding: 12px 12px 11px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(244, 247, 255, 0.94));
+  box-shadow: 0 10px 22px rgba(16, 24, 40, 0.05);
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1.58;
+  min-height: 118px;
+}
+
+.workflow-node::before {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workflow-node.action {
+  background: linear-gradient(180deg, rgba(231, 243, 255, 0.96), rgba(244, 249, 255, 0.94));
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.workflow-node.action::before {
+  content: 'Action';
+  color: #1d4ed8;
+  background: rgba(191, 219, 254, 0.78);
+}
+
+.workflow-node.sync {
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(243, 255, 249, 0.94));
+  border-color: rgba(52, 211, 153, 0.40);
+}
+
+.workflow-node.sync::before {
+  content: 'Sync';
+  color: #047857;
+  background: rgba(167, 243, 208, 0.75);
+}
+
+.workflow-node.result {
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(246, 249, 255, 0.94));
+  border-color: rgba(196, 181, 253, 0.45);
+}
+
+.workflow-node.result::before {
+  content: 'Result';
+  color: #5b21b6;
+  background: rgba(221, 214, 254, 0.74);
+}
+
+.workflow-node.exception {
+  background: linear-gradient(180deg, rgba(255, 241, 242, 0.98), rgba(255, 248, 248, 0.94));
+  border-color: rgba(253, 164, 175, 0.48);
+}
+
+.workflow-node.exception::before {
+  content: 'Exception';
+  color: #be123c;
+  background: rgba(254, 205, 211, 0.75);
+}
+
+.workflow-node.monitor {
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.98), rgba(255, 250, 244, 0.94));
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.workflow-node.monitor::before {
+  content: 'Monitor';
+  color: #9a3412;
+  background: rgba(254, 215, 170, 0.76);
+}
+
+.workflow-node strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+}
+
+.workflow-node small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.workflow-handoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.90);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.workflow-notes {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workflow-note-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.92));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 22px rgba(16, 24, 40, 0.05);
+}
+
+.workflow-note-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.workflow-note-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.68;
+}
+
+.workflow-note-card ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+  border: 1px solid rgba(33, 86, 245, 0.10);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lane-auth { --lane-accent: var(--accent); }
+.lane-agent { --lane-accent: var(--accent-4); }
+.lane-project { --lane-accent: var(--accent-2); }
+.lane-customer { --lane-accent: #16a34a; }
+.lane-sync { --lane-accent: var(--accent-3); }
+.lane-ops { --lane-accent: #ef4444; }
+
+.data-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 16px;
+}
+
+.data-card {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 247, 255, 0.9));
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.05);
+}
+
+.data-card h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.data-card p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.68;
+}
+
+.object-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.object {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.03);
+  border: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.object strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.object ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.code-block {
+  margin: 0;
+  padding: 18px;
+  border-radius: 18px;
+  background: #0f172a;
+  color: #e5f0ff;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.65;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.code-block code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.api-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.api-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(245, 248, 255, 0.92));
+}
+
+.api-card strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.api-card .routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.api-card .routes span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.note-bar {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(33, 86, 245, 0.14);
+  background: rgba(33, 86, 245, 0.08);
+  color: #16317f;
+  line-height: 1.7;
+}
+
+.footer {
+  margin: 24px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 1320px) {
+  .grid-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .api-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journey-track { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .workflow-notes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1080px) {
+  .hero,
+  .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .matrix-head {
+    display: none;
+  }
+
+  .matrix-row {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .api-grid { grid-template-columns: 1fr; }
+  .workflow-notes { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .shell { padding: 16px; }
+  .hero,
+  .data-card,
+  .info-card,
+  .metric,
+  .cell,
+  .step-card,
+  .row-label,
+  .api-card {
+    border-radius: 20px;
+  }
+
+  .grid-metrics,
+  .journey-track,
+  .object-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding: 20px;
+  }
+}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">System Swimlane · ปัจจุบัน</div>
+        <h1>Flow การทำงานและข้อมูลของ SENA Referral ทั้งระบบ</h1>
+        <p>
+          เอกสารนี้สรุปภาพรวมระบบตอนนี้แบบ swimlane ตั้งแต่การ login, การจัดการ agent / project / customer,
+          lead sync ไป ICON/QAS, ไปจนถึง dashboard, รายงาน และการ retry ของ lead sync logs.
+          จุดสำคัญของ flow ปัจจุบันคือ <strong>agent_id</strong> ถูกส่งอยู่ใน <strong>custom_label</strong>
+          ของ payload ที่ยิงไป ICON/QAS และถ้าส่งสำเร็จจะเก็บ <strong>iconLeadId</strong> ไว้ที่ customer พร้อมบันทึก audit log ทุกครั้ง.
+        </p>
+        <div class="chips">
+          <span class="chip primary">Auth + JWT</span>
+          <span class="chip success">Agent / Customer / Project CRUD</span>
+          <span class="chip warning">Lead Sync Logs + Retry</span>
+          <span class="chip purple">ICON / QAS Integration</span>
+          <span class="chip">Dashboard / Reports / Settings</span>
+        </div>
+      </div>
+
+      <div class="hero-side">
+        <div class="info-card">
+          <strong>Core modules</strong>
+          <p>AgentManagementNew, CustomerManagement, ProjectManagement, LeadSyncLogs, Dashboard, ReportsPage, SettingsPage</p>
+        </div>
+        <div class="info-card">
+          <strong>Core tables</strong>
+          <p>users, agents, projects, customers, lead_sync_logs</p>
+        </div>
+        <div class="info-card">
+          <strong>External services</strong>
+          <p>ICON/QAS lead create API และ SMTP / notification templates</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-metrics" aria-label="summary">
+      <div class="metric">
+        <div class="label">Access</div>
+        <div class="value">Login + Role</div>
+        <div class="desc">JWT protected routes, admin dashboard, checkAuth middleware</div>
+      </div>
+      <div class="metric">
+        <div class="label">Master Data</div>
+        <div class="value">Agent / Project</div>
+        <div class="desc">Auto agent code, project code search, price range, pass email</div>
+      </div>
+      <div class="metric">
+        <div class="label">Customer</div>
+        <div class="value">Approved / Duplicate / Pending</div>
+        <div class="desc">Link agentId, projectId, budgetMin / budgetMax, address and registration date</div>
+      </div>
+      <div class="metric">
+        <div class="label">Lead Sync</div>
+        <div class="value">custom_label.agent_id</div>
+        <div class="desc">Request / response saved in lead_sync_logs and customers.iconLeadId</div>
+      </div>
+      <div class="metric">
+        <div class="label">Monitoring</div>
+        <div class="value">Dashboard + Logs</div>
+        <div class="desc">Charts, stats, recent activities, retry failed lead sync</div>
+      </div>
+      <div class="metric">
+        <div class="label">Result</div>
+        <div class="value">Traceable Flow</div>
+        <div class="desc">Every sync attempt can be inspected, replayed, and audited</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>End-to-end Journey</h2>
+          <p>เส้นทางข้อมูลแบบปลายทางถึงปลายทาง ตั้งแต่ user เข้าใช้งานจนถึง ICON/QAS และการมอนิเตอร์ผลลัพธ์</p>
+        </div>
+      </div>
+
+      <div class="journey-track">
+        <article class="step-card">
+          <span class="step-no">01</span>
+          <h3>Login / Session</h3>
+          <p>User เปิด <code>/admin/dashboard</code> → กรอก email/password → ได้ JWT และ role</p>
+          <div class="step-tags"><span>auth</span><span>token</span><span>checkAuth</span></div>
+        </article>
+        <article class="step-card">
+          <span class="step-no">02</span>
+          <h3>Master Data</h3>
+          <p>จัดการ Agent / Project ด้วย form, search, detail modal, auto code และ validation</p>
+          <div class="step-tags"><span>agentCode</span><span>projectCode</span><span>CRUD</span></div>
+        </article>
+        <article class="step-card">
+          <span class="step-no">03</span>
+          <h3>Customer Create</h3>
+          <p>บันทึก customer พร้อม agentId, projectId, budgetMin/Max, status, address และ referralType</p>
+          <div class="step-tags"><span>approved</span><span>duplicate</span><span>pending</span></div>
+        </article>
+        <article class="step-card">
+          <span class="step-no">04</span>
+          <h3>Lead Sync</h3>
+          <p>sendLeadToIcon ส่ง payload ไป QAS/ICON พร้อม <code>custom_label.agent_id</code> และสร้าง audit log</p>
+          <div class="step-tags"><span>lead_sync_logs</span><span>iconLeadId</span><span>retry</span></div>
+        </article>
+        <article class="step-card">
+          <span class="step-no">05</span>
+          <h3>Monitor / Retry</h3>
+          <p>Admin เปิดหน้า lead logs, ตรวจ request/response, กด retry เฉพาะรายการ failed</p>
+          <div class="step-tags"><span>view</span><span>filter</span><span>retry</span></div>
+        </article>
+        <article class="step-card">
+          <span class="step-no">06</span>
+          <h3>Dashboard / Reports</h3>
+          <p>ดึง stats และกิจกรรมล่าสุดเพื่อดูภาพรวมทั้งหมดของระบบ</p>
+          <div class="step-tags"><span>charts</span><span>stats</span><span>activities</span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section workflow-section">
+      <div class="section-head">
+        <div>
+          <h2>Admin &amp; Agent Workflow</h2>
+          <p>มองเฉพาะการทำงานจริงของคนในระบบ ว่าใครทำอะไร ในจังหวะไหน โดยไม่ลงรายละเอียดเชิงเทคนิค</p>
+        </div>
+      </div>
+
+      <div class="workflow-toolbar" aria-label="workflow legend">
+        <span class="workflow-pill role-admin"><span class="dot"></span>Admin</span>
+        <span class="workflow-pill role-backend"><span class="dot"></span>Agent</span>
+        <span class="workflow-pill type-action"><span class="dot"></span>Action</span>
+        <span class="workflow-pill type-sync"><span class="dot"></span>Follow-up</span>
+        <span class="workflow-pill type-result"><span class="dot"></span>Result</span>
+        <span class="workflow-pill type-exception"><span class="dot"></span>Decision / Exception</span>
+      </div>
+
+      <div class="workflow-board">
+        <div class="workflow-phase-header" aria-hidden="true">
+          <div>Role / Stage</div>
+          <div>1. เตรียมพร้อม</div>
+          <div>2. รับเรื่องลูกค้า</div>
+          <div>3. ตรวจสอบข้อมูล</div>
+          <div>4. แจ้งผล / ตัดสินใจ</div>
+          <div>5. ติดตาม / แก้ไข</div>
+          <div>6. สรุปผล</div>
+        </div>
+
+        <div class="workflow-lane">
+          <div class="workflow-lane-name lane-auth">
+            <strong>Admin</strong>
+            <span>ดูแลข้อมูลหลักของระบบ, ตรวจรายการลูกค้า, ตัดสินผล และติดตามภาพรวมงาน</span>
+          </div>
+          <div class="workflow-cells">
+            <div class="workflow-node action" style="grid-column:1">
+              <strong>เตรียมข้อมูลให้พร้อม</strong>
+              <small>จัดการเอเจนต์, โครงการ และข้อมูลที่ทีมต้องใช้ก่อนเริ่มรับลูกค้า</small>
+            </div>
+            <div class="workflow-node action" style="grid-column:2">
+              <strong>รับรายการลูกค้าเข้ามา</strong>
+              <small>เห็นรายการที่ Agent ส่งเข้าระบบและเปิดดูรายละเอียดของแต่ละราย</small>
+              <div class="workflow-handoff">← รับต่อจาก Agent</div>
+            </div>
+            <div class="workflow-node exception" style="grid-column:3">
+              <strong>ตรวจสอบความครบถ้วน</strong>
+              <small>เช็กว่าข้อมูลซ้ำไหม, ข้อมูลครบไหม, และพร้อมเดินหน้าต่อหรือยัง</small>
+            </div>
+            <div class="workflow-node exception" style="grid-column:4">
+              <strong>ตัดสินผลรายการ</strong>
+              <small>อนุมัติ, ไม่ผ่าน, หรือขอข้อมูลเพิ่ม แล้วแจ้งผลกลับให้ Agent รับทราบ</small>
+              <div class="workflow-handoff">→ แจ้งผลให้ Agent</div>
+            </div>
+            <div class="workflow-node sync" style="grid-column:5">
+              <strong>ติดตามรายการที่มีปัญหา</strong>
+              <small>ถ้าข้อมูลไม่ครบหรือมีปัญหา Admin จะตามต่อ, แก้ไข, หรือส่งรายการใหม่</small>
+            </div>
+            <div class="workflow-node result" style="grid-column:6">
+              <strong>ดูภาพรวมผลงาน</strong>
+              <small>สรุปผล, ดูสถานะรายการทั้งหมด และติดตามภาพรวมของทีม</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="workflow-lane">
+          <div class="workflow-lane-name lane-agent">
+            <strong>Agent</strong>
+            <span>ส่งข้อมูลลูกค้า, ติดตามผลที่ Admin ตรวจสอบ, และช่วยเติมข้อมูลเมื่อมีการส่งกลับมาแก้</span>
+          </div>
+          <div class="workflow-cells">
+            <div class="workflow-node action" style="grid-column:1">
+              <strong>เข้าใช้งานและดูข้อมูลพร้อมขาย</strong>
+              <small>ดูโครงการและข้อมูลที่ต้องใช้ก่อนเริ่มส่งลูกค้าเข้าระบบ</small>
+            </div>
+            <div class="workflow-node action" style="grid-column:2">
+              <strong>ส่งข้อมูลลูกค้า</strong>
+              <small>กรอกชื่อลูกค้า, เลือกโครงการ, ใส่ข้อมูลติดต่อ และส่งต่อให้ Admin ตรวจสอบ</small>
+              <div class="workflow-handoff">→ ส่งต่อให้ Admin</div>
+            </div>
+            <div class="workflow-node sync" style="grid-column:3">
+              <strong>รอผลตรวจสอบ</strong>
+              <small>ติดตามว่ารายการผ่าน, ซ้ำ, หรือมีจุดที่ต้องเติมข้อมูลเพิ่มหรือไม่</small>
+            </div>
+            <div class="workflow-node result" style="grid-column:4">
+              <strong>รับผลจาก Admin</strong>
+              <small>รู้ว่ารายการผ่านหรือไม่ผ่าน และเข้าใจสถานะของลูกค้าที่ตัวเองส่งมา</small>
+            </div>
+            <div class="workflow-node sync" style="grid-column:5">
+              <strong>ช่วยแก้ไขหรือเติมข้อมูล</strong>
+              <small>ถ้ามีข้อมูลตกหล่นหรือ Admin ขอเพิ่ม Agent จะเป็นคนกลับมาอัปเดตข้อมูลให้ครบ</small>
+              <div class="workflow-handoff">← รับ feedback จาก Admin</div>
+            </div>
+            <div class="workflow-node result" style="grid-column:6">
+              <strong>ติดตามผลงานของตัวเอง</strong>
+              <small>ดูว่าลูกค้าที่ส่งไปอยู่ขั้นตอนไหน และมีอะไรที่ต้องติดตามต่อ</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-notes">
+        <div class="workflow-note-card">
+          <h3>Admin ทำอะไร</h3>
+          <p>Admin เป็นคนดูแลภาพรวม: เตรียมข้อมูล master, รับรายการจาก Agent, ตรวจสอบ, ตัดสินผล และตามต่อเมื่อมีรายการที่ยังไม่เรียบร้อย</p>
+        </div>
+        <div class="workflow-note-card">
+          <h3>Agent ทำอะไร</h3>
+          <p>Agent เป็นคนเริ่มต้นฝั่งหน้างาน: ส่งข้อมูลลูกค้า, รอผลจาก Admin, และกลับมาเติมข้อมูลหรือแก้ไขเมื่อได้รับ feedback</p>
+        </div>
+        <div class="workflow-note-card">
+          <h3>จังหวะสำคัญของงาน</h3>
+          <ul>
+            <li>จังหวะแรกคือ Agent ส่งลูกค้าเข้ามาให้ Admin เห็นรายการ</li>
+            <li>จังหวะถัดมาคือ Admin ตรวจแล้วแจ้งผลกลับว่า ผ่าน, ไม่ผ่าน, หรือขอข้อมูลเพิ่ม</li>
+            <li>ถ้ามีข้อมูลตกหล่น งานจะวนกลับไปที่ Agent เพื่อแก้และส่งต่อใหม่</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note-bar">
+        section นี้ตั้งใจอธิบายให้เห็นเฉพาะ workflow การทำงานจริงของคนในทีม: Admin กับ Agent ใครรับช่วงไหน และช่วงไหนที่ต้องคุยกันหรือส่งงานกลับไปกลับมา
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>Swimlane Matrix</h2>
+          <p>ตารางนี้สรุปว่าแต่ละ process ของระบบถูกทำงานใน lane ไหนบ้าง: UI, Backend, Database และ External / Result</p>
+        </div>
+      </div>
+
+      <div class="matrix">
+        <div class="matrix-head" aria-hidden="true">
+          <div>Process</div>
+          <div>UI / Trigger</div>
+          <div>Backend / Rules</div>
+          <div>DB / Data</div>
+          <div>External / Result</div>
+        </div>
+
+        <div class="matrix-row lane-auth">
+          <div class="row-label">
+            <div class="title">Auth & Session</div>
+            <div class="subtitle">เริ่มจาก login แล้วค่อยเปิดการทำงานของทุกโมดูลที่ต้องใช้สิทธิ์</div>
+          </div>
+          <div class="cell" data-label="UI / Trigger">
+            <h4>Login form</h4>
+            <p>ผู้ใช้กรอก email/password แล้วกดเข้าสู่ระบบจากหน้า dashboard</p>
+            <div class="field-tags"><span>email</span><span>password</span><span>/admin/dashboard</span></div>
+          </div>
+          <div class="cell" data-label="Backend / Rules">
+            <h4>POST /api/auth/login</h4>
+            <p>ตรวจ credential, ออก JWT, ระบุ role และเปิด access ให้ checkAuth route อื่น ๆ</p>
+            <div class="field-tags"><span>JWT</span><span>role</span><span>checkAuth</span></div>
+          </div>
+          <div class="cell" data-label="DB / Data">
+            <h4>users table</h4>
+            <p>เก็บ email, password hash, role, bud, name และความสัมพันธ์ที่ใช้กับ agent</p>
+            <div class="field-tags"><span>users</span><span>role</span><span>password_hash</span></div>
+          </div>
+          <div class="cell" data-label="External / Result">
+            <h4>Access ready</h4>
+            <p>JWT อยู่ฝั่ง client และ sidebar / menu ของระบบถูกเปิดตามสิทธิ์ผู้ใช้</p>
+            <div class="field-tags"><span>token</span><span>session</span><span>menu</span></div>
+          </div>
+        </div>
+
+        <div class="matrix-row lane-agent">
+          <div class="row-label">
+            <div class="title">Agent Master</div>
+            <div class="subtitle">รองรับ create / edit / delete / list / detail / next code / ref code</div>
+          </div>
+          <div class="cell" data-label="UI / Trigger">
+            <h4>AgentManagementNew</h4>
+            <p>หน้า agent มี approve / reject, detail modal, search และ action buttons</p>
+            <div class="field-tags"><span>approve</span><span>reject</span><span>detail modal</span></div>
+          </div>
+          <div class="cell" data-label="Backend / Rules">
+            <h4>Agent APIs</h4>
+            <p><code>/api/agents</code>, <code>/api/agents/next-code</code>, <code>/api/agents/by-ref-code/:code</code>, backfill ref code</p>
+            <div class="field-tags"><span>auto code</span><span>refCode</span><span>status</span></div>
+          </div>
+          <div class="cell" data-label="DB / Data">
+            <h4>agents + user sync</h4>
+            <p>ใช้ agentCode, refCode, agentTypeId, idCard, phone, email และ sync email จาก users</p>
+            <div class="field-tags"><span>agents</span><span>users</span><span>agent_types</span></div>
+          </div>
+          <div class="cell" data-label="External / Result">
+            <h4>Operational output</h4>
+            <p>ได้ agentCode ที่อ่านง่าย, refCode สำหรับแนะนำ, สถานะ active / inactive / suspended</p>
+            <div class="field-tags"><span>agentCode</span><span>refCode</span><span>status</span></div>
+          </div>
+        </div>
+
+        <div class="matrix-row lane-project">
+          <div class="row-label">
+            <div class="title">Project Master</div>
+            <div class="subtitle">ใช้เป็นข้อมูล master สำหรับ dropdown, search, ราคา, และการส่งเมลผลผ่าน</div>
+          </div>
+          <div class="cell" data-label="UI / Trigger">
+            <h4>ProjectManagement + ProjectForm</h4>
+            <p>ค้นหาด้วย project code / name, ตั้งราคา, เลือก type, เปิด/ปิด pass email</p>
+            <div class="field-tags"><span>search</span><span>price range</span><span>pass email</span></div>
+          </div>
+          <div class="cell" data-label="Backend / Rules">
+            <h4>Project APIs</h4>
+            <p><code>/api/projects</code> รองรับ search, CRUD และ auto-disable ถ้าเปิดส่งเมลแต่ไม่มี recipients</p>
+            <div class="field-tags"><span>search</span><span>CRUD</span><span>auto-disable</span></div>
+          </div>
+          <div class="cell" data-label="DB / Data">
+            <h4>projects table</h4>
+            <p>projectCode, projectName, projectType, priceRangeMin/Max, salesTeam, isActive, passEmailEnabled</p>
+            <div class="field-tags"><span>projects</span><span>projectCode</span><span>salesTeam</span></div>
+          </div>
+          <div class="cell" data-label="External / Result">
+            <h4>Reusable master data</h4>
+            <p>เอาไปใช้ใน customer dropdown, notification recipients, และการอ้างอิงโครงการใน lead sync</p>
+            <div class="field-tags"><span>dropdown</span><span>pass mail</span><span>projectCode</span></div>
+          </div>
+        </div>
+
+        <div class="matrix-row lane-customer">
+          <div class="row-label">
+            <div class="title">Customer Lifecycle</div>
+            <div class="subtitle">สร้าง / แก้ไข / ลบ / ดูรายละเอียดลูกค้า พร้อมเชื่อม agent และ project</div>
+          </div>
+          <div class="cell" data-label="UI / Trigger">
+            <h4>CustomerManagement</h4>
+            <p>ฟอร์ม customer เลือก agent/project, status, budget และมี detail modal / searchable dropdown</p>
+            <div class="field-tags"><span>agentId</span><span>projectId</span><span>status</span></div>
+          </div>
+          <div class="cell" data-label="Backend / Rules">
+            <h4>Customer APIs</h4>
+            <p><code>/api/customers</code> ตรวจ duplicate, สร้าง code, บันทึก status และ trigger แจ้งเตือน / sync</p>
+            <div class="field-tags"><span>duplicate</span><span>approved</span><span>pending</span></div>
+          </div>
+          <div class="cell" data-label="DB / Data">
+            <h4>customers table</h4>
+            <p>agentId, projectId, firstName, lastName, phone, email, budgetMin/Max, address, registrationDate, icon fields</p>
+            <div class="field-tags"><span>budgetMin</span><span>budgetMax</span><span>iconLeadId</span></div>
+          </div>
+          <div class="cell" data-label="External / Result">
+            <h4>Email + ready for sync</h4>
+            <p>เมื่อสถานะเปลี่ยนจะส่ง notification ไป agent และ lead นี้จะถูกส่งเข้า ICON/QAS ต่อ</p>
+            <div class="field-tags"><span>email notify</span><span>customerCode</span><span>lead ready</span></div>
+          </div>
+        </div>
+
+        <div class="matrix-row lane-sync">
+          <div class="row-label">
+            <div class="title">Lead Sync & Retry</div>
+            <div class="subtitle">จุดสำคัญที่สุดของ flow นี้: ยิง lead ไป ICON/QAS และเก็บ audit trace ทุกครั้ง</div>
+          </div>
+          <div class="cell" data-label="UI / Trigger">
+            <h4>LeadSyncLogs</h4>
+            <p>หน้า log สำหรับดู request / response / error และกด retry เฉพาะรายการ failed</p>
+            <div class="field-tags"><span>view</span><span>filter</span><span>retry</span></div>
+          </div>
+          <div class="cell" data-label="Backend / Rules">
+            <h4>sendLeadToIcon()</h4>
+            <p>สร้าง lead_sync_logs, ยิง <code>/lead/createlead</code>, บันทึก response, และอัปเดต customers.icon* fields</p>
+            <div class="field-tags"><span>request_payload</span><span>response_body</span><span>retry endpoint</span></div>
+          </div>
+          <div class="cell" data-label="DB / Data">
+            <h4>lead_sync_logs</h4>
+            <p>เก็บ status, attempt_no, retried_from_log_id, triggered_by_user_id, icon_lead_id, error_message</p>
+            <div class="field-tags"><span>pending</span><span>success</span><span>failed</span></div>
+          </div>
+          <div class="cell" data-label="External / Result">
+            <h4>ICON / QAS</h4>
+            <p>ตอบกลับด้วย <code>{ status, data }</code>; ถ้า status = 1 จะบันทึก leadId ลง customers.iconLeadId</p>
+            <div class="field-tags"><span>leadId</span><span>custom_label.agent_id</span><span>QAS</span></div>
+          </div>
+        </div>
+
+        <div class="matrix-row lane-ops">
+          <div class="row-label">
+            <div class="title">Dashboard & Ops</div>
+            <div class="subtitle">ภาพรวมผลลัพธ์ของทั้งระบบสำหรับ admin และทีมปฏิบัติการ</div>
+          </div>
+          <div class="cell" data-label="UI / Trigger">
+            <h4>Dashboard / Reports / Settings</h4>
+            <p>เปิดเมนู dashboard, ดู chart, รายการกิจกรรมล่าสุด และหน้าควบคุมค่าเริ่มต้นของระบบ</p>
+            <div class="field-tags"><span>charts</span><span>reports</span><span>settings</span></div>
+          </div>
+          <div class="cell" data-label="Backend / Rules">
+            <h4>Stats endpoints</h4>
+            <p><code>/api/dashboard/stats</code> และ <code>/api/dashboard/recent-activities</code> สรุปข้อมูลจากหลายตาราง</p>
+            <div class="field-tags"><span>aggregates</span><span>activity feed</span><span>admin</span></div>
+          </div>
+          <div class="cell" data-label="DB / Data">
+            <h4>Aggregates</h4>
+            <p>รวมจำนวนจาก users, agents, customers, projects และ lead_sync_logs เพื่อสร้าง chart และ KPI</p>
+            <div class="field-tags"><span>counts</span><span>activities</span><span>summaries</span></div>
+          </div>
+          <div class="cell" data-label="External / Result">
+            <h4>Operational visibility</h4>
+            <p>ทีมงานเห็นสถานะงานจริง, ดูแหล่ง error, และไล่ย้อน trace ได้ครบทุก lead</p>
+            <div class="field-tags"><span>monitor</span><span>audit trail</span><span>health</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>Core Data Objects</h2>
+          <p>สรุปข้อมูลหลักที่ระบบนี้ใช้งานจริง และจุดที่ข้อมูลไหลไปต่อใน flow</p>
+        </div>
+      </div>
+
+      <div class="data-grid">
+        <div class="data-card">
+          <h3>Object map</h3>
+          <p>โครงสร้างข้อมูลของแต่ละตารางหลักในระบบเพื่อให้เห็นว่าฟอร์มไหนเขียนอะไรลง DB และอะไรถูกส่งต่อไป service อื่น</p>
+          <div class="object-grid">
+            <div class="object">
+              <strong>users / agents</strong>
+              <ul>
+                <li>users: email, password hash, role, bud, name</li>
+                <li>agents: agentCode, refCode, agentTypeId, idCard, phone, email</li>
+                <li>status: active, inactive, suspended</li>
+              </ul>
+            </div>
+            <div class="object">
+              <strong>projects</strong>
+              <ul>
+                <li>projectCode, projectName, projectType</li>
+                <li>priceRangeMin / priceRangeMax, salesTeam</li>
+                <li>isActive, passEmailEnabled, passEmailRecipients</li>
+              </ul>
+            </div>
+            <div class="object">
+              <strong>customers</strong>
+              <ul>
+                <li>agentId, projectId, firstName, lastName, phone, email</li>
+                <li>budgetMin / budgetMax, status, referralType</li>
+                <li>registrationDate, address, iconLeadId, iconSyncStatus</li>
+              </ul>
+            </div>
+            <div class="object">
+              <strong>lead_sync_logs</strong>
+              <ul>
+                <li>requestPayload, responseBody, responseStatusCode</li>
+                <li>status, errorMessage, attemptNo</li>
+                <li>retriedFromLogId, triggeredByUserId, iconLeadId</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="data-card">
+          <h3>Payload to ICON / QAS</h3>
+          <p>ตัวอย่าง payload ที่ระบบส่งออกจริงตอนนี้ โดย <strong>agent_id</strong> ถูกย้ายไปอยู่ใน <strong>custom_label</strong> และส่งเฉพาะกรณีที่ผ่านการอนุมัติ</p>
+          <pre class="code-block"><code>{
+  "leadId": "",
+  "prefix": "คุณ",
+  "fname": "Noom Trisarn",
+  "lname": "",
+  "phone": "0965242850",
+  "email": "pnoom5@msn.com",
+  "msg": "เวลาที่สะดวก 09.00 - 12.00 น.",
+  "address": "",
+  "houseNumber": "",
+  "villageNumber": "",
+  "village": "",
+  "alley": "",
+  "road": "",
+  "subDistrict": "",
+  "district": "",
+  "province": "",
+  "postalCode": "",
+  "budget": "N/A",
+  "roomType": null,
+  "project": "SKN",
+  "source": "referral",
+  "isJuristic": null,
+  "grade": null,
+  "fname_en": null,
+  "lname_en": null,
+  "status": null,
+  "phone_landline": null,
+  "phone_international": null,
+  "facebook": null,
+  "line_id": null,
+  "owners": null,
+  "channel": null,
+  "custom_label": [
+    {
+      "name": "agent_id",
+      "value": "AG001"
+    }
+  ],
+  "ip_address": "",
+  "pdpachannel": ""
+}</code></pre>
+          <div class="note-bar">
+            เงื่อนไขปัจจุบัน: ถ้า customer มีสถานะ <strong>approved</strong> จะส่ง <strong>agentCode</strong> เข้า <strong>custom_label.agent_id</strong>
+            แต่ถ้าเป็น <strong>duplicate</strong> หรือสถานะอื่น ค่าจะเป็น <strong>null</strong>. เมื่อ ICON ตอบกลับสำเร็จ ระบบจะเก็บ <strong>iconLeadId</strong> และอัปเดต <strong>icon_sync_status</strong> เป็น success.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>API Surface</h2>
+          <p>รายการ endpoint หลักที่ใช้ขับทั้งระบบในช่วงปัจจุบัน</p>
+        </div>
+      </div>
+
+      <div class="api-grid">
+        <div class="api-card">
+          <strong>Auth</strong>
+          <div class="routes">
+            <span>/api/auth/login</span>
+          </div>
+        </div>
+        <div class="api-card">
+          <strong>Agents</strong>
+          <div class="routes">
+            <span>/api/agents</span>
+            <span>/api/agents/list</span>
+            <span>/api/agents/next-code</span>
+            <span>/api/agents/by-ref-code/:code</span>
+          </div>
+        </div>
+        <div class="api-card">
+          <strong>Customers</strong>
+          <div class="routes">
+            <span>/api/customers</span>
+            <span>/api/customers/next-code</span>
+            <span>/api/customers/:id</span>
+          </div>
+        </div>
+        <div class="api-card">
+          <strong>Projects</strong>
+          <div class="routes">
+            <span>/api/projects</span>
+            <span>/api/projects/:id</span>
+          </div>
+        </div>
+        <div class="api-card">
+          <strong>Lead Sync</strong>
+          <div class="routes">
+            <span>/api/lead-sync-logs</span>
+            <span>/api/lead-sync-logs/:id/retry</span>
+          </div>
+        </div>
+        <div class="api-card">
+          <strong>Dashboard</strong>
+          <div class="routes">
+            <span>/api/dashboard/stats</span>
+            <span>/api/dashboard/recent-activities</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="note-bar">
+        จุดที่ควรจำ: customer create flow ยิง lead ไป ICON/QAS แบบ async ไม่บล็อก response, lead_sync_logs ใช้เก็บ trace และ retry,
+        dashboard ใช้ aggregate data จากตารางหลักทั้งหมดเพื่อดูสถานะระบบในภาพรวม.
+      </div>
+    </section>
+
+    <div class="footer">File: docs/lead-sync-swimlane.html · System overview updated for the current SENA Referral flow</div>
+  </div>
+</body>
+</html>
